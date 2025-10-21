@@ -72,7 +72,7 @@ async function presignAttachment(
   size: number
 ) {
   return (await apiAuth(
-    `/boards/${boardId}/tasks/${taskId}/attachments/presign`,
+    `/board/${boardId}/tasks/${taskId}/attachments/presign`,
     "POST",
     { contentType, size }
   )) as PresignResp;
@@ -86,7 +86,7 @@ async function completeAttachment(
   size: number
 ) {
   return (await apiAuth(
-    `/boards/${boardId}/tasks/${taskId}/attachments/complete`,
+    `/board/${boardId}/tasks/${taskId}/attachments/complete`,
     "POST",
     { key, contentType, size }
   )) as CompleteResp;
@@ -115,11 +115,10 @@ export default function OpsTasks() {
   // 🔹 Refetch: guarda en el mapa por taskId
   const refetchTaskAttachments = async (boardId: string, taskId: string) => {
     const list = (await apiAuth(
-      `/boards/${boardId}/tasks/${taskId}/attachments`,
+      `/board/${boardId}/tasks/${taskId}/attachments`,
       "GET"
     )) as Attachment[];
-    const withBust = list.map((a) => ({ ...a, url: `${a.url}&t=${Date.now()}` }));
-    setAttachmentsByTask((prev) => ({ ...prev, [taskId]: withBust }));
+    setAttachmentsByTask(prev => ({ ...prev, [taskId]: list }));
   };
 
   // 🔹 Agregar inmediatamente tras complete (optimista)
@@ -176,7 +175,7 @@ export default function OpsTasks() {
         ...(overdue ? { overdue: "true" } : {}),
       }).toString();
 
-      const raw = await apiAuth(`/board/tasks?${qs}`, "GET"); // 👈 usa /boards
+      const raw = await apiAuth(`/board/boards/68e86564e1147008f9d03a1e/tasks?${qs}`, "GET"); // 👈 usa /boards
       const list = Array.isArray(raw) ? raw : raw?.content ?? [];
       const mapped: Task[] = list.map((t: any) => ({
         id: String(t.id ?? t.taskId ?? t._id),
@@ -209,7 +208,7 @@ export default function OpsTasks() {
   // actualizar estado
   const updateStatus = async (id: string, next: TaskStatus) => {
     try {
-      await apiAuth(`/boards/tasks/${id}/status`, "PATCH", { status: next });
+      await apiAuth(`/tasks/${id}/status`, "PATCH", { status: next });
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: next } : it)));
     } catch (e: any) {
       setMsg(e.message ?? String(e));
