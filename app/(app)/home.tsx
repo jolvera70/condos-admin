@@ -144,8 +144,6 @@ export default function Home() {
             <TileGrid
               items={[
                 { label: "Mis tareas", onPress: () => router.push("/(ops)/tasks") },
-                { label: "Incidencias", onPress: () => router.push("/(ops)/incidents") },
-                { label: "Bitácora", onPress: () => router.push("/(ops)/logbook") },
               ]}
             />
           </Section>

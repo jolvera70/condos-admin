@@ -38,8 +38,9 @@ export default function Login() {
       setBusy(true);
       setMsg("Entrando…");
       Keyboard.dismiss();
-
-      const res = await login(email.trim().toLowerCase(), password);
+const pass = password; // copia local
+setPassword("");       // limpia el estado inmediatamente
+      const res = await login(email.trim().toLowerCase(), pass);
       if (!res?.token) throw new Error("Respuesta sin token.");
 
       if (remember) {

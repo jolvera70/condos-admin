@@ -60,29 +60,36 @@ export async function api(
 ) {
   const url = `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
 
-  // console.log("[api]", method, url, token ? "(bearer)" : "(no token)");
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  // Solo Content-Type si hay body (JSON)
+  if (body != null) headers["Content-Type"] = "application/json";
 
+    if (BASE.includes(".ngrok-free.app")) {
+    headers["ngrok-skip-browser-warning"] = "true";
+  }
+  
   const res = await fetch(url, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
     body: body != null ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401 || res.status === 403) {
-    onAuthError?.();
-  }
-
+  if (res.status === 401 || res.status === 403) onAuthError?.();
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     const err: ApiError = new Error(txt || res.statusText || `HTTP ${res.status}`);
-    err.status = res.status;
+    (err as any).status = res.status;
     throw err;
   }
 
   if (res.status === 204) return null;
+
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Unexpected response (status ${res.status}): ${ct}\n${txt?.slice(0,300)}`);
+  }
   return res.json();
 }
 

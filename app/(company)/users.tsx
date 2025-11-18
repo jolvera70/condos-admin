@@ -3,608 +3,191 @@ import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
+  SafeAreaView,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { apiAuth } from "../../lib/api";
 import {
   Role,
   allowedRoleOptionsFor,
-  canManage,
-  highestRoleInOrg,
+  highestRoleInOrg
 } from "../../lib/rbac";
 import { useApp } from "../../lib/store";
 
+/* ================== Tipos ================== */
 type OrgOpt = { orgId: string; name: string };
+type Status = "ACTIVE" | "SUSPENDED" | "ARCHIVED";
 type UserItem = {
   id: string;
   email: string;
   fullName?: string;
   roles?: string[];
-  orgs?: Array<{ orgId: string; role: Role | string }>;
+  orgs?: Array<{ orgId: string; role: Role | string; status?: Status }>;
+  status?: Status;
+};
+const STATUS_OPTS: Status[] = ["ACTIVE", "SUSPENDED"];
+
+/* ================== Breakpoints ================== */
+const useBreakpoints = () => {
+  const { width } = useWindowDimensions();
+  return {
+    width,
+    isPhone: width < 768,
+    isTablet: width >= 768 && width < 1024,
+    isDesktop: width >= 1024,
+  };
 };
 
-export default function UsersCompany() {
-  const router = useRouter();
-  const { me, logout } = useApp();
-
-  const [orgs, setOrgs] = useState<OrgOpt[]>([]);
-  const [orgId, setOrgId] = useState("");
-  const [users, setUsers] = useState<UserItem[]>([]);
-  const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  // ---------- cargar tenants ----------
-  async function fetchTenantsByIds(ids: string[]) {
-    if (!ids.length) return [];
-    const res = await apiAuth(`/tenant/tenants?ids=${encodeURIComponent(ids.join(","))}`, "GET");
-    const list = Array.isArray(res) ? res : res?.content ?? [];
-    return list.map((t: any) => ({
-      orgId: String(t.orgId ?? t.id),
-      name: String(t.name ?? t.slug ?? t.orgId ?? t.id),
-    })) as OrgOpt[];
+/* ================== Select adaptativo ================== */
+type Option<T extends string> = { label: string; value: T };
+function Select<T extends string>({
+  value,
+  options,
+  onChange,
+  minWidth = 160,
+  testID,
+}: {
+  value: T;
+  options: Option<T>[];
+  onChange: (v: T) => void;
+  minWidth?: number;
+  testID?: string;
+}) {
+  if (Platform.OS === "web") {
+    return (
+      <select
+        data-testid={testID}
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value as T)}
+        style={{
+          minWidth,
+          padding: 10,
+          borderRadius: 12,
+          border: "1px solid #E5E7EB" as any,
+          background: "#fff",
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
   }
 
-  const loadOrgs = async () => {
-    setMsg("");
-    try {
-      if (!me) return;
-
-      const isSA =
-        (Array.isArray(me.roles) && me.roles.includes("SUPERADMIN")) ||
-        (Array.isArray(me.orgs) && me.orgs.some((o: any) => o.role === "SUPERADMIN"));
-
-      if (isSA) {
-        const raw = await apiAuth("/tenant?page=0&size=1000", "GET");
-        const list = Array.isArray(raw) ? raw : raw?.content ?? [];
-        const arr: OrgOpt[] = list.map((t: any) => ({
-          orgId: String(t.orgId ?? t.id),
-          name: String(t.name ?? t.slug ?? t.orgId ?? t.id),
-        }));
-        setOrgs(arr);
-        if (!orgId && arr.length) setOrgId(arr[0].orgId);
-      } else {
-        const ids = (me?.orgs ?? []).map((o: any) => String(o.orgId));
-        const enriched = await fetchTenantsByIds(ids);
-        setOrgs(enriched);
-        if (!orgId && enriched.length) setOrgId(enriched[0].orgId);
-      }
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  };
-
-  useEffect(() => {
-    loadOrgs();
-  }, [me]);
-
-  // ---------- cargar usuarios por org ----------
-  const loadUsers = async () => {
-    if (!orgId) return;
-    setMsg("");
-    setLoading(true);
-    try {
-      const list: UserItem[] = await apiAuth(
-        `/user/users?orgId=${encodeURIComponent(orgId)}`,
-        "GET"
-      );
-      setUsers(Array.isArray(list) ? list : []);
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    loadUsers();
-  }, [orgId]);
-
-  // ---------- permisos / roles ----------
-  const myRoleInOrg = useMemo<Role>(() => highestRoleInOrg(me, orgId), [me, orgId]);
-  const createRoleOptions = useMemo<Role[]>(
-    () => allowedRoleOptionsFor(me, orgId),
-    [me, orgId]
-  );
-
-  const roleForOrg = (u: UserItem, org: string): Role => {
-    const found = u.orgs?.find((o) => o.orgId === org)?.role;
-    const r = (Array.isArray(u.roles) && u.roles.length ? u.roles[0] : found) as
-      | string
-      | undefined;
-    if (r === "SUPERADMIN" || r === "ADMINISTRADOR" || r === "SUPERVISOR" || r === "OPERATIVO")
-      return r as Role;
-    return "OPERATIVO";
-  };
-
-  // ---------- crear usuario ----------
-  const [newUser, setNewUser] = useState<{
-    fullName: string;
-    email: string;
-    password: string;
-    role: Role;
-  }>({
-    fullName: "",
-    email: "",
-    password: "",
-    role: "OPERATIVO",
-  });
-
-  useEffect(() => {
-    if (createRoleOptions.length && !createRoleOptions.includes(newUser.role)) {
-      setNewUser((u) => ({ ...u, role: createRoleOptions[0] }));
-    }
-  }, [createRoleOptions]);
-
-  const createUser = async () => {
-    try {
-      const body = {
-        fullName: newUser.fullName,
-        email: newUser.email.trim().toLowerCase(),
-        orgId,
-        role: newUser.role,
-        provisionAccount: true,
-        tempPassword: newUser.password,
-      };
-      await apiAuth("/user/users", "POST", body);
-      setNewUser({
-        fullName: "",
-        email: "",
-        password: "",
-        role: createRoleOptions[0] ?? "OPERATIVO",
-      });
-      await loadUsers();
-      setMsg("Usuario creado ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  };
-
-  // ---------- edición ----------
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{
-    fullName: string;
-    email: string;
-    password?: string;
-  }>({
-    fullName: "",
-    email: "",
-    password: "",
-  });
-
-  const startEdit = (u: UserItem) => {
-    setEditingId(u.id);
-    setEditForm({
-      fullName: u.fullName ?? "",
-      email: u.email ?? "",
-      password: "",
-    });
-  };
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditForm({ fullName: "", email: "", password: "" });
-  };
-  const saveEdit = async () => {
-    if (!editingId) return;
-    try {
-      const payload: any = {
-        fullName: editForm.fullName,
-        email: editForm.email.trim().toLowerCase(),
-      };
-      if (editForm.password && editForm.password.length >= 3) {
-        payload.password = editForm.password;
-      }
-      await apiAuth(`/user/users/${editingId}`, "PATCH", payload);
-      await loadUsers();
-      cancelEdit();
-      setMsg("Usuario actualizado ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  };
-
-  // ---------- rol ----------
-  const changeRole = async (u: UserItem, newRole: Role) => {
-    try {
-      await apiAuth(`/users/${u.id}/orgs/${orgId}/role`, "PATCH", { role: newRole });
-      await loadUsers();
-      setMsg("Rol actualizado ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  };
-
-  // ---------- archivar ----------
-  const softDelete = async (u: UserItem) => {
-    try {
-      await apiAuth(`/user/users/${u.id}`, "DELETE");
-      await loadUsers();
-      setMsg("Usuario archivado ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  };
-
-  /* ------------------------ estilos base ------------------------ */
-  const card: any = {
-    borderWidth: 1,
-    borderColor: "#060404ff",
-    borderRadius: 16,
-    backgroundColor: "#fff",
-    padding: 14,
-    ...(Platform.OS === "web"
-      ? { boxShadow: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10)" }
-      : {}),
-  };
-  const input = {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "web" ? 10 : 12,
-  } as const;
-
-  /* ------------------------ render ------------------------ */
-  return (
-    <View style={{ flex: 1, backgroundColor: "#FAFAFB" }}>
-      {/* TOP BAR */}
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderColor: "#ECECEC",
-          backgroundColor: "#FFFFFF",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>Condos</Text>
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          {!!me?.email && (
-            <Text
-              style={{
-                color: "#475569",
-                backgroundColor: "#F1F5F9",
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: "700",
-              }}
-            >
-              {me.email}
-            </Text>
-          )}
-          <PillButton label="Salir" tone="danger" onPress={logout} />
-        </View>
-      </View>
-
-      {/* SUB HEADER */}
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          borderBottomWidth: 1,
-          borderColor: "#ECECEC",
-          backgroundColor: "#F9FAFB",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>Usuarios de la empresa</Text>
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          {Platform.OS === "web" ? (
-            <select
-              value={orgId}
-              onChange={(e) => setOrgId(e.currentTarget.value)}
-              style={{ padding: 8, borderRadius: 8, border: "1px solid #E5E7EB" as any }}
-            >
-              {orgs.map((t) => (
-                <option key={t.orgId} value={t.orgId}>
-                  {t.name} ({t.orgId})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <View style={{ borderWidth: 1, borderRadius: 10, borderColor: "#E5E7EB" }}>
-              <Picker selectedValue={orgId} onValueChange={(v) => setOrgId(String(v))}>
-                {orgs.map((t) => (
-                  <Picker.Item key={t.orgId} label={`${t.name} (${t.orgId})`} value={t.orgId} />
-                ))}
-              </Picker>
-            </View>
-          )}
-          <PillButton label="Menú principal" onPress={() => router.replace("/(app)/home")} />
-        </View>
-      </View>
-
-      {/* SCROLL PRINCIPAL */}
-      <View style={{ flex: 1, minHeight: 0 }}>
-      <FlatList
-        style={{ flex: 1 }}                               // 👈 asegura altura
-        contentContainerStyle={{ padding: 16, paddingBottom: 120 }} // 👈 espacio final
-        keyboardShouldPersistTaps="handled"
-        data={users}
-        keyExtractor={(u) => u.id}
-        refreshing={loading}
-        onRefresh={loadUsers}
-        ListHeaderComponent={
-          <View style={{ gap: 12 }}>
-            {!!msg && (
-              <View
-                style={{
-                  padding: 10,
-                  borderRadius: 12,
-                  backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
-                  borderWidth: 1,
-                  borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
-                }}
-              >
-                <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>{msg}</Text>
-              </View>
-            )}
-
-            {/* Crear usuario */}
-            <View style={{ ...card, gap: 8 }}>
-              <Text style={{ fontWeight: "800" }}>Crear nuevo usuario</Text>
-
-              <TextInput
-                placeholder="Nombre"
-                value={newUser.fullName}
-                onChangeText={(v) => setNewUser((u) => ({ ...u, fullName: v }))}
-                style={input}
-              />
-              <TextInput
-                placeholder="Email"
-                value={newUser.email}
-                onChangeText={(v) => setNewUser((u) => ({ ...u, email: v }))}
-                autoCapitalize="none"
-                style={input}
-              />
-              <TextInput
-                placeholder="Password"
-                value={newUser.password}
-                onChangeText={(v) => setNewUser((u) => ({ ...u, password: v }))}
-                secureTextEntry
-                style={input}
-              />
-
-              {/* Rol permitido según permisos */}
-              {Platform.OS === "web" ? (
-                <select
-                  value={newUser.role}
-                  onChange={(e) =>
-                    setNewUser((u) => ({ ...u, role: e.currentTarget.value as Role }))
-                  }
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
-                >
-                  {createRoleOptions.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <View style={{ borderWidth: 1, borderRadius: 10, borderColor: "#E5E7EB" }}>
-                  <Picker
-                    selectedValue={newUser.role}
-                    onValueChange={(v) => setNewUser((u) => ({ ...u, role: v as Role }))}
-                  >
-                    {createRoleOptions.map((r) => (
-                      <Picker.Item key={r} label={r} value={r} />
-                    ))}
-                  </Picker>
-                </View>
-              )}
-
-              <PillButton
-                label="Crear usuario"
-                onPress={createUser}
-                disabled={!orgId || !newUser.email || !newUser.password || !createRoleOptions.length}
-              />
-            </View>
-
-            {/* Encabezado listado */}
-            <View
-              style={{
-                ...card,
-                padding: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Text style={{ fontWeight: "800" }}>
-                Usuarios de {orgs.find((o) => o.orgId === orgId)?.name || orgId || "..."}
-              </Text>
-              {loading && <ActivityIndicator />}
-              <Chip
-                label={`Mi rol: ${myRoleInOrg}`}
-                tone={myRoleInOrg === "SUPERADMIN" ? "primary" : "secondary"}
-              />
-            </View>
-          </View>
-        }
-        ListEmptyComponent={
-          <Text style={{ color: "#777", padding: 12 }}>
-            {loading ? "Cargando..." : "Sin usuarios para mostrar."}
-          </Text>
-        }
-        renderItem={({ item: u }) => {
-          const isEditing = editingId === u.id;
-          const currentRole: Role = roleForOrg(u, orgId);
-          const youCanManage = canManage(me, orgId, currentRole);
-
-          return (
-            <View
-              style={{
-                padding: 12,
-                borderWidth: 1,
-                borderColor: "#F3F4F6",
-                borderRadius: 12,
-                backgroundColor: "#fff",
-                marginTop: 8,
-                gap: 8,
-                ...(Platform.OS === "web"
-                  ? { boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 1px 2px rgba(16,24,40,.06)" }
-                  : {}),
-              }}
-            >
-              {!isEditing ? (
-                <>
-                  <View
-                    style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <Text style={{ fontWeight: "800", fontSize: 16 }}>
-                      {u.fullName || u.email}
-                    </Text>
-                    <RoleBadge role={currentRole} />
-                  </View>
-
-                  <Text style={{ color: "#475569" }}>{u.email}</Text>
-
-                  {Array.isArray(u.orgs) && u.orgs.length ? (
-                    <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                      {u.orgs.map((o) => {
-                        const orgName = orgs.find((x) => x.orgId === o.orgId)?.name ?? o.orgId;
-                        return (
-                          <Chip
-                            key={o.orgId}
-                            label={`${orgName}: ${String(o.role)}`}
-                            tone="secondary"
-                          />
-                        );
-                      })}
-                    </View>
-                  ) : (
-                    <Text style={{ color: "#64748B" }}>Sin organizaciones</Text>
-                  )}
-
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {youCanManage && (
-                      <>
-                        {/* Cambiar rol en la org actual */}
-                        {Platform.OS === "web" ? (
-                          <select
-                            value={currentRole}
-                            onChange={(e) => changeRole(u, e.currentTarget.value as Role)}
-                            style={{
-                              padding: 8,
-                              borderRadius: 10,
-                              border: "1px solid #E5E7EB" as any,
-                            }}
-                          >
-                            {allowedRoleOptionsFor(me, orgId).map((r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <View
-                            style={{ borderWidth: 1, borderRadius: 10, borderColor: "#E5E7EB" }}
-                          >
-                            <Picker
-                              selectedValue={currentRole}
-                              onValueChange={(v) => changeRole(u, String(v) as Role)}
-                            >
-                              {allowedRoleOptionsFor(me, orgId).map((r) => (
-                                <Picker.Item key={r} label={r} value={r} />
-                              ))}
-                            </Picker>
-                          </View>
-                        )}
-
-                        <PillButton label="Editar" tone="secondary" onPress={() => startEdit(u)} />
-                        <PillButton label="Archivar" tone="danger" onPress={() => softDelete(u)} />
-                      </>
-                    )}
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={{ fontWeight: "800" }}>Editar usuario</Text>
-                  <TextInput
-                    placeholder="Nombre"
-                    value={editForm.fullName}
-                    onChangeText={(v) => setEditForm((f) => ({ ...f, fullName: v }))}
-                    style={input}
-                  />
-                  <TextInput
-                    placeholder="Email"
-                    value={editForm.email}
-                    onChangeText={(v) => setEditForm((f) => ({ ...f, email: v }))}
-                    autoCapitalize="none"
-                    style={input}
-                  />
-                  <TextInput
-                    placeholder="Password (opcional)"
-                    value={editForm.password}
-                    onChangeText={(v) => setEditForm((f) => ({ ...f, password: v }))}
-                    secureTextEntry
-                    style={input}
-                  />
-
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <PillButton label="Guardar" onPress={saveEdit} />
-                    <PillButton label="Cancelar" tone="secondary" onPress={cancelEdit} />
-                  </View>
-                </>
-              )}
-            </View>
+  if (Platform.OS === "ios") {
+    const current = options.find((o) => o.value === value)?.label ?? String(value);
+    return (
+      <Pressable
+        onPress={() => {
+          ActionSheetIOS.showActionSheetWithOptions(
+            {
+              options: [...options.map((o) => o.label), "Cancelar"],
+              cancelButtonIndex: options.length,
+              userInterfaceStyle: "light",
+            },
+            (idx) => {
+              if (idx != null && idx >= 0 && idx < options.length) {
+                onChange(options[idx].value);
+              }
+            }
           );
         }}
-        ListFooterComponent={<View style={{ height: 60 }} />} // 👈 colofón
-      />
-      </View>
+        style={{
+          minWidth,
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
+          borderRadius: 999,
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          backgroundColor: "#fff",
+        }}
+      >
+        <Text style={{ fontWeight: "600", color: "#111827" }}>{current}</Text>
+      </Pressable>
+    );
+  }
+
+  // Android
+  return (
+    <View
+      style={{
+        minWidth,
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        borderRadius: 12,
+        overflow: "hidden",
+        backgroundColor: "#fff",
+        height: 44,
+        justifyContent: "center",
+      }}
+    >
+      <Picker
+        selectedValue={value}
+        onValueChange={(v) => onChange(v as T)}
+        mode="dropdown"
+        style={{ height: 44, width: "100%" }}
+      >
+        {options.map((o) => (
+          <Picker.Item key={o.value} label={o.label} value={o.value} />
+        ))}
+      </Picker>
     </View>
   );
 }
 
-/* ======================= UI helpers ======================= */
-
+/* ================== UI helpers ================== */
 function PillButton({
   label,
   onPress,
   disabled,
   tone = "primary",
+  size = "md",
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   tone?: "primary" | "secondary" | "warning" | "danger";
+  size?: "sm" | "md";
+  style?: any;
 }) {
   const palette = {
-    primary: { bg: "#2563EB", bg2: "#1D4ED8", fg: "#fff" },
-    secondary: { bg: "#F1F5F9", bg2: "#E2E8F0", fg: "#0F172A" },
-    warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#fff" },
-    danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#fff" },
+    primary: { bg: "#2563EB", fg: "#fff" },
+    secondary: { bg: "#F1F5F9", fg: "#0F172A" },
+    warning: { bg: "#F59E0B", fg: "#fff" },
+    danger: { bg: "#EF4444", fg: "#fff" },
   } as const;
   const p = palette[tone];
+  const pv = size === "sm" ? 8 : 10;
+  const ph = size === "sm" ? 12 : 14;
+  const fs = size === "sm" ? 12 : 14;
 
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 999,
-        backgroundColor: disabled ? "#CBD5E1" : pressed ? p.bg2 : p.bg,
-      })}
+      style={[
+        {
+          backgroundColor: p.bg,
+          borderRadius: 999,
+          paddingVertical: pv,
+          paddingHorizontal: ph,
+          opacity: disabled ? 0.6 : 1,
+        },
+        style,
+      ]}
     >
-      <Text style={{ color: p.fg, fontWeight: "800" }}>{label.toUpperCase()}</Text>
+      <Text style={{ color: p.fg, fontWeight: "800", fontSize: fs }}>{label.toUpperCase()}</Text>
     </Pressable>
   );
 }
@@ -624,29 +207,492 @@ function RoleBadge({ role }: { role: Role }) {
   );
 }
 
-function Chip({
-  label,
-  tone = "secondary",
-}: {
-  label: string;
-  tone?: "primary" | "secondary" | "warning";
-}) {
-  const palette = {
-    primary: { bg: "#EEF2FF", fg: "#3730A3" },
-    secondary: { bg: "#F1F5F9", fg: "#0F172A" },
-    warning: { bg: "#FFFBEB", fg: "#92400E" },
+function StatusBadge({ status }: { status?: string }) {
+  const s = (status ?? "ACTIVE").toUpperCase();
+  const map = {
+    ACTIVE: { bg: "#DCFCE7", fg: "#065F46", label: "ACTIVO" },
+    SUSPENDED: { bg: "#F3F4F6", fg: "#374151", label: "SUSPENDIDO" },
+    ARCHIVED: { bg: "#FEE2E2", fg: "#991B1B", label: "ARCHIVADO" },
   } as const;
-  const p = palette[tone];
+  const { bg, fg, label } = map[s as keyof typeof map] ?? map.ACTIVE;
   return (
-    <View
-      style={{
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 999,
-        backgroundColor: p.bg,
-      }}
-    >
-      <Text style={{ color: p.fg, fontWeight: "700" }}>{label}</Text>
+    <View style={{ backgroundColor: bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+      <Text style={{ color: fg, fontWeight: "800" }}>{label}</Text>
     </View>
+  );
+}
+
+function Chip({ label }: { label: string }) {
+  return (
+    <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#F1F5F9" }}>
+      <Text style={{ color: "#0F172A", fontWeight: "700" }}>{label}</Text>
+    </View>
+  );
+}
+
+/* ================== Pantalla ================== */
+export default function UsersCompany() {
+  const router = useRouter();
+  const { me, logout } = useApp();
+  const { width, isPhone, isTablet, isDesktop } = useBreakpoints();
+
+  const maxW = isDesktop ? 1100 : isTablet ? 880 : width;
+  const gutter = isTablet || isDesktop ? 16 : 10;
+  const numColumns = isTablet || isDesktop ? 2 : 1;
+
+  const [orgs, setOrgs] = useState<OrgOpt[]>([]);
+  const [orgId, setOrgId] = useState("");
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  /* ------- cargar tenants ------- */
+  async function fetchTenantsByIds(ids: string[]) {
+    if (!ids.length) return [];
+    try {
+      const res = await apiAuth(`/tenant/lookup?ids=${encodeURIComponent(ids.join(","))}`, "GET");
+      const list = Array.isArray(res) ? res : res?.content ?? [];
+      return list.map((t: any) => ({
+        orgId: String(t.id ?? t.orgId),
+        name: String(t.name ?? t.slug ?? t.id),
+      })) as OrgOpt[];
+    } catch {
+      return [];
+    }
+  }
+
+  const loadOrgs = async () => {
+    setMsg("");
+    if (!me) return;
+
+    const isSA =
+      (Array.isArray(me.roles) && me.roles.includes("SUPERADMIN")) ||
+      (Array.isArray(me.orgs) && me.orgs.some((o: any) => o.role === "SUPERADMIN"));
+
+    try {
+      if (isSA) {
+        const raw = await apiAuth("/tenant?page=0&size=1000", "GET");
+        const list = Array.isArray(raw) ? raw : raw?.content ?? [];
+        const arr: OrgOpt[] = list.map((t: any) => ({
+          orgId: String(t.orgId ?? t.id),
+          name: String(t.name ?? t.slug ?? t.orgId ?? t.id),
+        }));
+        setOrgs(arr);
+        if (!orgId && arr.length) setOrgId(arr[0].orgId);
+      } else {
+        const ids = (me?.orgs ?? []).map((o: any) => String(o.orgId));
+        const enriched = await fetchTenantsByIds(ids);
+        setOrgs(enriched);
+        if (!orgId && enriched.length) setOrgId(enriched[0].orgId);
+      }
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    }
+  };
+  useEffect(() => {
+    loadOrgs();
+  }, [me]);
+
+  /* ------- cargar usuarios ------- */
+  const loadUsers = async () => {
+    if (!orgId) return;
+    setMsg("");
+    setLoading(true);
+    try {
+      const list: UserItem[] = await apiAuth(`/user/users?orgId=${encodeURIComponent(orgId)}`, "GET");
+      setUsers(Array.isArray(list) ? list : []);
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    loadUsers();
+  }, [orgId]);
+
+  /* ------- helpers rol/estado ------- */
+  const myRoleInOrg = useMemo<Role>(() => highestRoleInOrg(me, orgId), [me, orgId]);
+  const createRoleOptions = useMemo<Role[]>(
+    () => allowedRoleOptionsFor(me, orgId),
+    [me, orgId]
+  );
+  const roleForOrg = (u: UserItem, org: string): Role => {
+    const found = u.orgs?.find((o) => o.orgId === org)?.role;
+    const r = (Array.isArray(u.roles) && u.roles.length ? u.roles[0] : found) as string | undefined;
+    if (r === "SUPERADMIN" || r === "ADMINISTRADOR" || r === "SUPERVISOR" || r === "OPERATIVO")
+      return r as Role;
+    return "OPERATIVO";
+  };
+  const statusForOrg = (u: UserItem, org: string): Status =>
+    (u.orgs?.find((o) => o.orgId === org)?.status as Status) ?? "ACTIVE";
+
+  /* ------- crear usuario ------- */
+  const [newUser, setNewUser] = useState<{ fullName: string; email: string; password: string; role: Role }>({
+    fullName: "",
+    email: "",
+    password: "",
+    role: "OPERATIVO",
+  });
+  const [showCreate, setShowCreate] = useState(false);
+
+  useEffect(() => {
+    if (createRoleOptions.length && !createRoleOptions.includes(newUser.role)) {
+      setNewUser((u) => ({ ...u, role: createRoleOptions[0] }));
+    }
+  }, [createRoleOptions]);
+
+  const createUser = async () => {
+    try {
+      const body = {
+        fullName: newUser.fullName,
+        email: newUser.email.trim().toLowerCase(),
+        orgId,
+        role: newUser.role,
+        status: "ACTIVE" as Status,
+        provisionAccount: true,
+        tempPassword: newUser.password,
+      };
+      await apiAuth("/user/users", "POST", body);
+      setNewUser({ fullName: "", email: "", password: "", role: createRoleOptions[0] ?? "OPERATIVO" });
+      await loadUsers();
+      setShowCreate(false); // cerrar formulario al crear
+      setMsg("Usuario creado ✅");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    }
+  };
+
+  /* ------- edición ------- */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{ fullName: string; email: string; password?: string }>({
+    fullName: "",
+    email: "",
+    password: "",
+  });
+  const startEdit = (u: UserItem) => {
+    setEditingId(u.id);
+    setEditForm({ fullName: u.fullName ?? "", email: u.email ?? "", password: "" });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ fullName: "", email: "", password: "" });
+  };
+  const saveEdit = async () => {
+    if (!editingId) return;
+    try {
+      const payload: any = { fullName: editForm.fullName, email: editForm.email.trim().toLowerCase() };
+      if (editForm.password && editForm.password.length >= 3) payload.password = editForm.password;
+      await apiAuth(`/user/users/${editingId}`, "PUT", payload);
+      await loadUsers();
+      cancelEdit();
+      setMsg("Usuario actualizado ✅");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    }
+  };
+
+  /* ------- cambios rol/estado ------- */
+  const changeStatus = async (u: UserItem, newStatus: Status) => {
+    try {
+      await apiAuth(`/user/users/${u.id}/orgs/${orgId}/status`, "PATCH", { status: newStatus });
+      await loadUsers();
+      setMsg("Status actualizado ✅");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    }
+  };
+  const changeRole = async (u: UserItem, newRole: Role) => {
+    try {
+      await apiAuth(`/user/users/${u.id}/orgs/${orgId}/role`, "PATCH", { role: newRole });
+      await loadUsers();
+      setMsg("Rol actualizado ✅");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    }
+  };
+  const softDelete = async (u: UserItem) => {
+    try {
+      await apiAuth(`/user/users/${u.id}`, "DELETE");
+      await loadUsers();
+      setMsg("Usuario archivado ✅");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    }
+  };
+
+  /* ------- estilos ------- */
+  const cardBase = {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    padding: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
+  } as const;
+
+  const input = {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "android" ? 8 : 12,
+    minHeight: 44,
+    fontSize: 16,
+    backgroundColor: "#FFFFFF",
+  } as const;
+
+  /* ------- grid ------- */
+  const cardWidth = useMemo(() => {
+    if (numColumns === 1) return maxW - 32; // 16 + 16 padding contenedor
+    const totalGutters = gutter * (numColumns - 1);
+    return (maxW - 32 - totalGutters) / numColumns;
+  }, [maxW, numColumns, gutter]);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
+      <View style={{ flex: 1, alignItems: "center" }}>
+        <View style={{ width: maxW, flex: 1 }}>
+          {/* Top bar */}
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: isPhone ? 10 : 12,
+              borderBottomWidth: 1,
+              borderColor: "#ECECEC",
+              backgroundColor: "#FFFFFF",
+              flexDirection: isPhone ? "column" : "row",
+              alignItems: isPhone ? "flex-start" : "center",
+              justifyContent: "space-between",
+              gap: isPhone ? 10 : 8,
+              ...(Platform.OS === "web" ? { position: "sticky" as any, top: 0, zIndex: 50 } : {}),
+            }}
+          >
+            <Text style={{ fontSize: isTablet || isDesktop ? 20 : 18, fontWeight: "800" }}>Condos Admin</Text>
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+              {!!me?.email && (
+                <Text
+                  style={{
+                    color: "#475569",
+                    backgroundColor: "#F1F5F9",
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 10,
+                    fontSize: 12,
+                    fontWeight: "700",
+                    maxWidth: 280,
+                  }}
+                  numberOfLines={1}
+                >
+                  {me.email}
+                </Text>
+              )}
+              <PillButton label="Salir" tone="danger" size="sm" onPress={logout} />
+            </View>
+          </View>
+
+          {/* Sub header */}
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderBottomWidth: 1,
+              borderColor: "#ECECEC",
+              backgroundColor: "#F9FAFB",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: "800" }}>Usuarios de la empresa</Text>
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <Select
+                value={orgId as any}
+                onChange={(v) => setOrgId(String(v))}
+                options={orgs.map((t) => ({ label: t.name, value: t.orgId as any }))}
+                minWidth={200}
+                testID="org-select"
+              />
+              <PillButton
+                label={showCreate ? "OCULTAR" : "CREAR USUARIO"}
+                tone={showCreate ? "secondary" : "primary"}
+                onPress={() => setShowCreate((v) => !v)}
+              />
+              <PillButton label="Menú principal" onPress={() => router.replace("/(app)/home")} />
+            </View>
+          </View>
+
+          {/* Lista */}
+          <FlatList
+            data={users}
+            keyExtractor={(u) => u.id}
+            numColumns={numColumns}
+            columnWrapperStyle={numColumns > 1 ? { gap: gutter } : undefined}
+            contentContainerStyle={{ padding: 16, paddingBottom: 80, gap: 12 }}
+            refreshing={loading}
+            onRefresh={loadUsers}
+            ListHeaderComponent={
+              <View style={{ gap: 12 }}>
+                {!!msg && (
+                  <View
+                    style={{
+                      padding: 10,
+                      borderRadius: 12,
+                      backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
+                      borderWidth: 1,
+                      borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
+                    }}
+                  >
+                    <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>{msg}</Text>
+                  </View>
+                )}
+
+                {/* Crear usuario (oculto/visible con toggle) */}
+                {showCreate && (
+                  <View style={[cardBase, { gap: 10 }]}>
+                    <Text style={{ fontWeight: "800", fontSize: 16 }}>Crear nuevo usuario</Text>
+                    <TextInput
+                      placeholder="Nombre"
+                      value={newUser.fullName}
+                      onChangeText={(v) => setNewUser((u) => ({ ...u, fullName: v }))}
+                      style={input}
+                    />
+                    <TextInput
+                      placeholder="Email"
+                      value={newUser.email}
+                      onChangeText={(v) => setNewUser((u) => ({ ...u, email: v }))}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="email-address"
+                      style={input}
+                    />
+                    <TextInput
+                      placeholder="Password"
+                      value={newUser.password}
+                      onChangeText={(v) => setNewUser((u) => ({ ...u, password: v }))}
+                      secureTextEntry
+                      style={input}
+                    />
+                    <Select
+                      value={newUser.role}
+                      onChange={(v) => setNewUser((u) => ({ ...u, role: v }))}
+                      options={allowedRoleOptionsFor(me, orgId).map((r) => ({ label: r, value: r }))}
+                      minWidth={200}
+                    />
+                    <PillButton
+                      label="Crear usuario"
+                      onPress={createUser}
+                      disabled={!orgId || !newUser.email || !newUser.password}
+                    />
+                  </View>
+                )}
+
+                {/* Encabezado listado */}
+                <View style={[cardBase, { padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+                  <Text style={{ fontWeight: "800" }}>
+                    Usuarios de {orgs.find((o) => o.orgId === orgId)?.name || orgId || "..."}
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                    {loading && <ActivityIndicator />}
+                    <Chip label={`Mi rol: ${myRoleInOrg}`} />
+                  </View>
+                </View>
+              </View>
+            }
+            renderItem={({ item: u }) => {
+              const isEditing = editingId === u.id;
+              const role = roleForOrg(u, orgId);
+              const status = statusForOrg(u, orgId);
+
+              return (
+                <View style={[cardBase, { width: cardWidth }]}>
+                  {!isEditing ? (
+                    <>
+                      <View style={{ gap: 2, marginBottom: 6 }}>
+                        <Text style={{ fontWeight: "800", fontSize: 16 }} numberOfLines={1}>
+                          {u.fullName || u.email}
+                        </Text>
+                        <Text style={{ color: "#64748B" }} numberOfLines={1}>
+                          {u.email}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                        <RoleBadge role={role} />
+                        <StatusBadge status={status} />
+                      </View>
+
+                      {/* Rol */}
+                      <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                        <Text style={{ fontWeight: "600" }}>Rol:</Text>
+                        <Select
+                          value={role}
+                          onChange={(v) => changeRole(u, v as Role)}
+                          options={allowedRoleOptionsFor(me, orgId).map((r) => ({ label: r, value: r }))}
+                          minWidth={200}
+                        />
+                      </View>
+
+                      {/* Status */}
+                      {status !== "ARCHIVED" && (
+                        <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                          <Text style={{ fontWeight: "600" }}>Status:</Text>
+                          <Select
+                            value={status}
+                            onChange={(v) => changeStatus(u, v as Status)}
+                            options={STATUS_OPTS.map((s) => ({ label: s, value: s }))}
+                            minWidth={200}
+                          />
+                        </View>
+                      )}
+
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <PillButton label="Editar" tone="secondary" onPress={() => startEdit(u)} />
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ fontWeight: "800" }}>Editar usuario</Text>
+                      <TextInput
+                        placeholder="Nombre"
+                        value={editForm.fullName}
+                        onChangeText={(v) => setEditForm((f) => ({ ...f, fullName: v }))}
+                        style={input}
+                      />
+                      <TextInput
+                        placeholder="Email"
+                        value={editForm.email}
+                        onChangeText={(v) => setEditForm((f) => ({ ...f, email: v }))}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="email-address"
+                        style={input}
+                      />
+                      <TextInput
+                        placeholder="Password (opcional)"
+                        value={editForm.password}
+                        onChangeText={(v) => setEditForm((f) => ({ ...f, password: v }))}
+                        secureTextEntry
+                        style={input}
+                      />
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <PillButton label="Guardar" onPress={saveEdit} />
+                        <PillButton label="Cancelar" tone="secondary" onPress={cancelEdit} />
+                      </View>
+                    </>
+                  )}
+                </View>
+              );
+            }}
+            ListFooterComponent={<View style={{ height: 40 }} />}
+          />
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }

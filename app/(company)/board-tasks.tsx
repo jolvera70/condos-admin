@@ -1,141 +1,146 @@
-// app/(company)/board-tasks.tsx
+// app/(app)/admin/board-tasks.tsx
 import { Picker } from "@react-native-picker/picker";
+import * as Notifications from "expo-notifications";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
+  ActionSheetIOS,
+  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
   Text,
   TextInput,
-  View
+  View,
+  useWindowDimensions,
 } from "react-native";
 import { apiAuth } from "../../lib/api";
-import { Role, highestRoleInOrg, isSelf } from "../../lib/rbac";
 import { useApp } from "../../lib/store";
 
-/* ======================= Tipos ======================= */
-type TaskStatus = "OPEN" | "IN_PROGRESS" | "DONE" | "ARCHIVED";
+async function webNotify(title: string, body: string, data?: any) {
+  if (typeof window === "undefined" || typeof Notification === "undefined") {
+    alert(`${title}\n${body}`);
+    return;
+  }
+  if (Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+  if (Notification.permission === "granted") {
+    const n = new Notification(title, { body, data });
+    n.onclick = () => {
+      if (data?.taskId) window.location.hash = `/tasks/${data.taskId}`;
+    };
+  } else {
+    alert(`${title}\n${body}`);
+  }
+}
+
+async function ensureNativeNotificationPermission() {
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== "granted") {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  return finalStatus === "granted";
+}
+
+type TaskStatus = "OPEN" | "IN_PROGRESS" | "DONE" | "ARCHIVED" | string;
 type Task = {
   id: string;
   orgId: string;
   boardId: string;
   title: string;
   description?: string;
-  assigneeId?: string;
   status: TaskStatus;
+  assigneeId?: string;
+  dueDate?: string; // yyyy-MM-dd
   createdAt?: string;
   updatedAt?: string;
 };
 
-type Member = { id: string; fullName?: string; email: string };
+type UserOpt = { id: string; label: string };
 
-/* ======================= Pantalla ======================= */
 export default function BoardTasks() {
   const router = useRouter();
-  const { me, logout } = useApp();
-  const params = useLocalSearchParams<{ boardId?: string; orgId?: string; boardName?: string }>();
-  const boardId = params.boardId ? String(params.boardId) : "";
-  const orgId = params.orgId ? String(params.orgId) : "";
-  const boardName = params.boardName ? String(params.boardName) : "";
+  const { me, token, logout } = useApp();
+  const { width } = useWindowDimensions();
+  const twoCols = width >= 820; // tablet/web: 2 columnas
+  const { boardId, orgId: orgIdParam, boardName } =
+    useLocalSearchParams<{ boardId: string; orgId: string; boardName?: string }>();
 
+  const orgId = String(orgIdParam || "");
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [users, setUsers] = useState<UserOpt[]>([]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // create/edit form
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Crear (oculto hasta presionar el botón)
+  const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
+  const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string>("");
+  const [dueDate, setDueDate] = useState<string>("");
 
-  // members
-  const [members, setMembers] = useState<Member[]>([]);
-  const [membersMsg, setMembersMsg] = useState("");
+  const userNameById = useMemo(
+    () => Object.fromEntries(users.map((u) => [u.id, u.label])),
+    [users]
+  );
 
-  // RBAC
-  const myRole: Role = useMemo(() => highestRoleInOrg(me, orgId), [me, orgId]);
-
-  const canCrudTasks =
-    myRole === "SUPERADMIN" || myRole === "ADMINISTRADOR" || myRole === "SUPERVISOR";
-  const canHardDelete = myRole === "SUPERADMIN" || myRole === "ADMINISTRADOR";
-  const canArchive = canCrudTasks;
-  const canReassign = canCrudTasks;
-
-  const canOperativeEditOwn = (t: Task) => myRole === "OPERATIVO" && isSelf(me, t.assigneeId);
-  const canEditTask = (t: Task) => canCrudTasks || canOperativeEditOwn(t);
-  const canChangeStatus = (t: Task) => canCrudTasks || canOperativeEditOwn(t);
-
-  /* ---------- helpers ---------- */
-  const memberById = useMemo(() => new Map(members.map((m) => [String(m.id), m])), [members]);
-  const displayAssignee = (id?: string) => {
-    if (!id) return "—";
-    const m = memberById.get(id);
-    return m ? `${m.fullName || m.email}` : id;
-  };
-
-  const fmt = (iso?: string) => (iso ? new Date(iso).toLocaleString() : "—");
-
-  /* ---------- cargar miembros ---------- */
   useEffect(() => {
-    async function loadMembers() {
-      setMembersMsg("");
-      setMembers([]);
-      if (!orgId) return;
-      try {
-        const raw = await apiAuth(
-          `/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE`,
-          "GET"
-        );
-        const list = Array.isArray(raw) ? raw : raw?.content ?? [];
-        const arr: Member[] = list.map((u: any) => ({
-          id: String(u.id ?? u._id),
-          fullName: u.fullName,
-          email: u.email,
-        }));
-        setMembers(arr);
-      } catch (e: any) {
-        setMembersMsg(e.message ?? String(e));
-      }
+  const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data as any;
+    // TODO: si tienes ruta de detalle de tarea, navega ahí
+    // router.push(`/login}`);
+  });
+  return () => sub.remove();
+}, []);
+
+  /* ------------------------ cargar usuarios de la org ------------------------ */
+  const loadUsers = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const list = await apiAuth(
+        `/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE`,
+        "GET",
+        undefined,
+        token ?? undefined
+      );
+      const arr: UserOpt[] = (Array.isArray(list) ? list : []).map((u: any) => ({
+        id: String(u.id),
+        label: String(u.fullName?.trim() || u.email),
+      }));
+      setUsers(arr);
+      if (!assigneeId && arr.length) setAssigneeId(arr[0].id);
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
     }
-    loadMembers();
-  }, [orgId]);
+  }, [orgId, token, assigneeId]);
 
-  /* ---------- guard sin params ---------- */
-  if (!boardId || !orgId) {
-    return (
-      <View style={{ padding: 16 }}>
-        <TopBar meEmail={me?.email} onLogout={logout} />
-        <SubHeader title="Tareas" right={<PillButton label="Volver" onPress={() => router.back()} />} />
-        <Text style={{ marginTop: 8 }}>
-          Abre esta pantalla desde un condominio/board para ver sus tareas.
-        </Text>
-      </View>
-    );
-  }
-
-  /* ---------- data ---------- */
-  async function loadTasks() {
+  /* ------------------------ cargar tareas del board ------------------------ */
+  const loadTasks = useCallback(async () => {
+    if (!boardId) return;
     setMsg("");
     setLoading(true);
     try {
-      const qs = `?page=0&size=1000&includeArchived=false`;
       const raw = await apiAuth(
-        `/board/boards/${encodeURIComponent(boardId)}/tasks${qs}`,
-        "GET"
+        `/board/boards/${boardId}/tasks?page=0&size=1000`,
+        "GET",
+        undefined,
+        token ?? undefined
       );
-      const list = Array.isArray(raw) ? raw : raw?.content ?? [];
-      const arr: Task[] = list.map((x: any) => ({
-        id: x.id ?? x.taskId ?? x._id,
-        orgId: String(x.orgId),
-        boardId: String(x.boardId),
-        title: String(x.title),
-        description: x.description,
-        assigneeId: x.assigneeId ? String(x.assigneeId) : undefined,
-        status: x.status as TaskStatus,
-        createdAt: x.createdAt,
-        updatedAt: x.updatedAt,
+      const list: Task[] = Array.isArray(raw) ? raw : raw?.content ?? [];
+      const arr = list.map((t: any) => ({
+        id: String(t.id ?? t.taskId ?? t._id),
+        orgId: String(t.orgId),
+        boardId: String(t.boardId),
+        title: String(t.title),
+        description: t.description,
+        status: t.status as TaskStatus,
+        assigneeId: t.assigneeId ? String(t.assigneeId) : undefined,
+        dueDate: t.dueDate ? String(t.dueDate) : undefined,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
       }));
       setTasks(arr);
     } catch (e: any) {
@@ -143,112 +148,51 @@ export default function BoardTasks() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [boardId, token]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
   useEffect(() => {
     loadTasks();
-  }, [boardId]);
+  }, [loadTasks]);
 
-  /* ---------- actions ---------- */
-  async function createTask() {
-    if (!canCrudTasks) {
-      setMsg("No tienes permisos para crear tareas.");
-      return;
-    }
-    const body = {
-      orgId,
-      boardId,
-      title: title.trim(),
-      description: desc.trim() || undefined,
-      assigneeId: assigneeId || undefined,
-    };
-    if (!body.title) {
-      setMsg("Título requerido");
-      return;
-    }
+  /* ------------------------ crear tarea ------------------------ */
+  const createTask = async () => {
     try {
-      await apiAuth(`/board/boards/${encodeURIComponent(boardId)}/tasks`, "POST", body);
-      setTitle("");
-      setDesc("");
-      setAssigneeId("");
+      if (!title.trim()) {
+        setMsg("Escribe un título");
+        return;
+      }
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      assigneeId: assigneeId || undefined,
+      dueDate: dueDate || undefined, // "YYYY-MM-DD"
+    };
+
+    // Crea y regresa la tarea (asegúrate que tu API devuelva el objeto creado con `id`)
+    const created = await apiAuth(`/board/boards/${boardId}/tasks`, "POST", payload);
+    const taskId = String(created?.id ?? created?.taskId ?? created?._id);
+
+    // 🔔 Notificación (real por backend + fallback local de prueba)
+    await notifyTaskAssigned({
+      assigneeId: assigneeId || undefined,
+      taskId,
+      title: payload.title,
+    });
+      setDescription("");
+      setAssigneeId(assigneeId);
+      setDueDate("");
       await loadTasks();
       setMsg("Tarea creada ✅");
+      setShowCreate(false);
     } catch (e: any) {
       setMsg(e.message ?? String(e));
     }
-  }
+  };
 
-  async function updateTask(id: string) {
-    const t = tasks.find((x) => x.id === id);
-    if (!t || !canEditTask(t)) {
-      setMsg("No tienes permisos para editar esta tarea.");
-      return;
-    }
-    try {
-      const payload: any = { title: title.trim(), description: desc.trim() || undefined };
-      if (canReassign) payload.assigneeId = assigneeId || undefined;
-      await apiAuth(`/board/boards/tasks/${id}`, "PUT", payload);
-      setEditingId(null);
-      setTitle("");
-      setDesc("");
-      setAssigneeId("");
-      await loadTasks();
-      setMsg("Tarea actualizada ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  }
-
-  async function changeStatus(id: string, status: TaskStatus) {
-    const t = tasks.find((x) => x.id === id);
-    if (!t || !canChangeStatus(t)) {
-      setMsg("No puedes cambiar el estado de esta tarea.");
-      return;
-    }
-    try {
-      await apiAuth(
-        `/board/boards/tasks/${id}/status?status=${encodeURIComponent(status)}`,
-        "PATCH"
-      );
-      await loadTasks();
-      setMsg(`Estado: ${status} ✅`);
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
-    }
-  }
-
-  async function archiveTask(id: string) {
-    if (!canArchive) {
-      setMsg("No puedes archivar esta tarea.");
-      return;
-    }
-    await changeStatus(id, "ARCHIVED");
-  }
-
-  async function deleteTask(id: string) {
-    if (!canHardDelete) {
-      setMsg("No puedes eliminar definitivamente esta tarea.");
-      return;
-    }
-    const go = async () => {
-      try {
-        await apiAuth(`/board/boards/tasks/${id}`, "DELETE");
-        await loadTasks();
-        setMsg("Tarea eliminada ❌");
-      } catch (e: any) {
-        setMsg(e.message ?? String(e));
-      }
-    };
-    if (Platform.OS === "web") {
-      if (confirm("¿Eliminar definitivamente?")) await go();
-    } else {
-      Alert.alert("Confirmar", "¿Eliminar definitivamente?", [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Eliminar", style: "destructive", onPress: go },
-      ]);
-    }
-  }
-
-  /* ---------- estilos base ---------- */
+  /* ------------------------ helpers UI / estilos ------------------------ */
   const card: any = {
     borderWidth: 1,
     borderColor: "#EAEAEA",
@@ -267,40 +211,206 @@ export default function BoardTasks() {
     paddingVertical: Platform.OS === "web" ? 10 : 12,
   } as const;
 
-  /* ---------- UI ---------- */
+/* ============ Selector de Asignado ============ */
+const AssigneeSelector = () => {
+  // 1) WEB: <select>
+  if (Platform.OS === "web") {
+    return (
+      <select
+        value={assigneeId}
+        onChange={(e) => setAssigneeId(e.currentTarget.value)}
+        style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any, minWidth: 220 }}
+      >
+        <option value="">— sin asignar —</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  // 2) ANDROID: Picker en modo dropdown (no ocupa espacio al abrir)
+  if (Platform.OS === "android") {
+    return (
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
+          borderRadius: 10,
+          minHeight: 44,
+          justifyContent: "center",
+          backgroundColor: "#fff",
+          elevation: 2,
+        }}
+      >
+        <Picker
+          selectedValue={assigneeId}
+          onValueChange={(v) => setAssigneeId(String(v))}
+          mode="dropdown"
+          style={{ height: 44 }}
+          itemStyle={{ fontSize: 14 }}
+        >
+          <Picker.Item label="— sin asignar —" value="" />
+          {users.map((u) => (
+            <Picker.Item key={u.id} label={u.label} value={u.id} />
+          ))}
+        </Picker>
+      </View>
+    );
+  }
+
+  // 3) iOS/iPad: ActionSheet (no rompe el layout)
+  const options = ["— sin asignar —", ...users.map((u) => u.label), "Cancelar"];
+  const cancelButtonIndex = options.length - 1;
+
+  const currentLabel =
+    assigneeId ? users.find((u) => u.id === assigneeId)?.label ?? assigneeId : "— sin asignar —";
+
+  const openSheet = () => {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: "Asignar a…",
+        options,
+        cancelButtonIndex,
+        userInterfaceStyle: "light",
+      },
+      (idx) => {
+        if (idx === cancelButtonIndex) return;
+        if (idx === 0) {
+          setAssigneeId("");
+        } else {
+          const selectedUser = users[idx - 1];
+          if (selectedUser) setAssigneeId(selectedUser.id);
+        }
+      }
+    );
+  };
+
+  return (
+    <Pressable
+      onPress={openSheet}
+      style={({ pressed }) => ({
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        borderRadius: 10,
+        minHeight: 44,
+        backgroundColor: pressed ? "#F8FAFC" : "#fff",
+        justifyContent: "center",
+        paddingHorizontal: 12,
+      })}
+    >
+      <Text style={{ fontWeight: "700", color: "#111827" }} numberOfLines={1}>
+        {currentLabel}
+      </Text>
+      <Text style={{ position: "absolute", right: 12, color: "#94A3B8" }}>▼</Text>
+    </Pressable>
+  );
+};
+
+  /* ------------------------ Render ------------------------ */
   return (
     <View style={{ flex: 1, backgroundColor: "#FAFAFB" }}>
-      {/* TOP BAR */}
-      <TopBar meEmail={me?.email} onLogout={logout} />
+      {/* --- TOP BAR --- */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderColor: "#ECECEC",
+          backgroundColor: "#FFFFFF",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: "800" }}>Condos Admin</Text>
+        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+          {!!me?.email && (
+            <Text
+              style={{
+                color: "#475569",
+                backgroundColor: "#F1F5F9",
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: "700",
+              }}
+            >
+              {me.email}
+            </Text>
+          )}
+          <PillButton label="SALIR" tone="danger" onPress={logout} />
+        </View>
+      </View>
 
-      {/* SUB HEADER */}
-      <SubHeader
-        title={`Tareas — ${boardName || boardId}`}
-        right={<PillButton label="Volver" onPress={() => router.back()} />}
-      />
+      {/* --- SUB HEADER --- */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          borderBottomWidth: 1,
+          borderColor: "#ECECEC",
+          backgroundColor: "#F9FAFB",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: "800" }}>
+          Tareas · {boardName || boardId}
+        </Text>
+        <PillButton label="VOLVER" onPress={() => router.back()} />
+      </View>
 
-      {/* SCROLL PRINCIPAL */}
-      <View style={{ flex: 1, minHeight: 0 }}>
-        <FlatList
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-          data={tasks}
-          refreshing={loading}
-          onRefresh={loadTasks}
-          keyExtractor={(t) => t.id}
-          ListHeaderComponent={
-            <View style={{ gap: 12 }}>
-              {!!msg && (
-                <Banner
-                  text={msg}
-                  tone={msg.includes("✅") ? "success" : "error"}
-                />
-              )}
+      {/* --- LISTA PRINCIPAL --- */}
+      <FlatList
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16 }}
+        keyboardShouldPersistTaps="handled"
+        data={tasks}
+        keyExtractor={(t) => t.id}
+        refreshing={loading}
+        onRefresh={loadTasks}
+        numColumns={twoCols ? 2 : 1}
+        columnWrapperStyle={twoCols ? { gap: 16 } : undefined}
+        ListHeaderComponent={
+          <View style={{ gap: 12 }}>
+            {!!msg && (
+              <View
+                style={{
+                  padding: 10,
+                  borderRadius: 12,
+                  backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
+                  borderWidth: 1,
+                  borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
+                }}
+              >
+                <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>{msg}</Text>
+              </View>
+            )}
 
-              {/* Crear (Supervisor↑) */}
-              {canCrudTasks && (
-                <View style={{ ...card, gap: 8 }}>
-                  <Text style={{ fontWeight: "800" }}>Nueva tarea</Text>
+            {/* Toggle crear tarea */}
+            <View style={{ ...card, gap: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ fontWeight: "800" }}>Nueva tarea</Text>
+                <View style={{ marginLeft: "auto" }}>
+                  <PillButton
+                    label={showCreate ? "OCULTAR" : "CREAR TAREA"}
+                    tone={showCreate ? "secondary" : "primary"}
+                    onPress={() => setShowCreate((v) => !v)}
+                  />
+                </View>
+              </View>
+
+              {showCreate && (
+                <View style={{ gap: 8 }}>
                   <TextInput
                     placeholder="Título"
                     value={title}
@@ -309,224 +419,89 @@ export default function BoardTasks() {
                   />
                   <TextInput
                     placeholder="Descripción (opcional)"
-                    value={desc}
-                    onChangeText={setDesc}
+                    value={description}
+                    onChangeText={setDescription}
                     style={input}
                   />
-
-                  {/* Responsable */}
-                  {canReassign && (
-                    <AssigneeSelector
-                      assigneeId={assigneeId}
-                      setAssigneeId={setAssigneeId}
-                      members={members}
-                      membersMsg={membersMsg}
+                  <AssigneeSelector />
+                  {Platform.OS === "web" ? (
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.currentTarget.value)}
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
+                    />
+                  ) : (
+                    <TextInput
+                      placeholder="yyyy-MM-dd"
+                      value={dueDate}
+                      onChangeText={setDueDate}
+                      style={input}
                     />
                   )}
-
-                  <PillButton label="Crear" onPress={createTask} disabled={!title.trim()} />
+                  <PillButton label="CREAR" onPress={createTask} disabled={!title.trim()} />
                 </View>
               )}
             </View>
-          }
-          ListEmptyComponent={
-            <Text style={{ color: "#777", paddingTop: 12 }}>
-              {loading ? "Cargando..." : "Sin tareas."}
-            </Text>
-          }
-          renderItem={({ item: t }) => {
-            const iCanEdit = canEditTask(t);
-            const iCanChangeStatus = canChangeStatus(t);
-            return (
-              <Pressable
-                style={{
-                  ...card,
-                  marginTop: 10,
-                  gap: 8,
-                }}
-              >
-                {editingId === t.id ? (
-                  <>
-                    <Text style={{ fontWeight: "800" }}>Editar tarea</Text>
-                    <TextInput
-                      placeholder="Título"
-                      value={title}
-                      onChangeText={setTitle}
-                      style={input}
-                    />
-                    <TextInput
-                      placeholder="Descripción"
-                      value={desc}
-                      onChangeText={setDesc}
-                      style={input}
-                    />
-                    {canReassign && (
-                      <AssigneeSelector
-                        assigneeId={assigneeId}
-                        setAssigneeId={setAssigneeId}
-                        members={members}
-                        membersMsg={membersMsg}
-                      />
-                    )}
-                    <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                      <PillButton label="Guardar" onPress={() => updateTask(t.id)} />
-                      <PillButton
-                        label="Cancelar"
-                        tone="secondary"
-                        onPress={() => {
-                          setEditingId(null);
-                          setTitle("");
-                          setDesc("");
-                          setAssigneeId("");
-                        }}
-                      />
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {/* Header item */}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text style={{ fontWeight: "800", fontSize: 16 }}>
-                        {t.title}
-                      </Text>
-                      <StatusBadge status={t.status} />
-                    </View>
 
-                    {/* Meta */}
-                    {!!t.description && (
-                      <Text style={{ color: "#475569" }}>{t.description}</Text>
-                    )}
-                    {!!t.assigneeId && (
-                      <Text style={{ color: "#64748B" }}>
-                        Responsable: {displayAssignee(t.assigneeId)}
-                      </Text>
-                    )}
-                    <Text style={{ color: "#94A3B8", fontSize: 12 }}>
-                      Creado: {fmt(t.createdAt)} · Actualizado: {fmt(t.updatedAt)}
-                    </Text>
-
-                    {/* Acciones */}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-                      {iCanEdit && (
-                        <PillButton
-                          label="Editar"
-                          tone="secondary"
-                          onPress={() => {
-                            setEditingId(t.id);
-                            setTitle(t.title);
-                            setDesc(t.description ?? "");
-                            setAssigneeId(t.assigneeId ?? "");
-                          }}
-                        />
-                      )}
-                      {iCanChangeStatus && t.status !== "IN_PROGRESS" && (
-                        <PillButton
-                          label="En progreso"
-                          onPress={() => changeStatus(t.id, "IN_PROGRESS")}
-                        />
-                      )}
-                      {iCanChangeStatus && t.status !== "DONE" && (
-                        <PillButton
-                          label="Completar"
-                          onPress={() => changeStatus(t.id, "DONE")}
-                        />
-                      )}
-                      {canArchive && t.status !== "ARCHIVED" && (
-                        <PillButton
-                          label="Archivar"
-                          tone="warning"
-                          onPress={() => archiveTask(t.id)}
-                        />
-                      )}
-                      {canHardDelete && (
-                        <PillButton
-                          label="Eliminar"
-                          tone="danger"
-                          onPress={() => deleteTask(t.id)}
-                        />
-                      )}
-                    </View>
-                  </>
-                )}
-              </Pressable>
-            );
-          }}
-          ListFooterComponent={<View style={{ height: 60 }} />}
-        />
-      </View>
-    </View>
-  );
-}
-
-/* ======================= UI helpers ======================= */
-
-function TopBar({ meEmail, onLogout }: { meEmail?: string; onLogout: () => void }) {
-  return (
-    <View
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderColor: "#ECECEC",
-        backgroundColor: "#FFFFFF",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: 8,
-      }}
-    >
-      <Text style={{ fontSize: 18, fontWeight: "800" }}>Condos</Text>
-      <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-        {!!meEmail && (
-          <Text
+            {/* Encabezado listado */}
+            <View style={{ ...card, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={{ fontWeight: "800" }}>Tareas</Text>
+              {loading && <ActivityIndicator />}
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          <Text style={{ color: "#777", padding: 12 }}>
+            {loading ? "Cargando..." : "No hay tareas para este board."}
+          </Text>
+        }
+        renderItem={({ item: t }) => (
+          <View
             style={{
-              color: "#475569",
-              backgroundColor: "#F1F5F9",
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 10,
-              fontSize: 12,
-              fontWeight: "700",
+              padding: 12,
+              borderWidth: 1,
+              borderColor: "#F3F4F6",
+              borderRadius: 12,
+              backgroundColor: "#fff",
+              marginTop: 8,
+              gap: 6,
+              ...(Platform.OS === "web"
+                ? { boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 1px 2px rgba(16,24,40,.06)" }
+                : {}),
+              // ancho por columna en grid nativo
+              flexBasis: twoCols ? "48%" : "100%",
+              maxWidth: twoCols ? "48%" : "100%",
             }}
           >
-            {meEmail}
-          </Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ fontWeight: "800", fontSize: 16 }}>{t.title}</Text>
+              <StatusBadge status={t.status} />
+            </View>
+
+            {!!t.description && <Text>{t.description}</Text>}
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+              {t.assigneeId && (
+                <Chip label={`Asignado: ${userNameById[t.assigneeId] ?? t.assigneeId}`} />
+              )}
+              {t.dueDate && <Chip label={`Vence: ${t.dueDate}`} tone="warning" />}
+              {!!t.createdAt && (
+                <Chip
+                  label={`Creada: ${new Date(t.createdAt).toLocaleString()}`}
+                  tone="secondary"
+                />
+              )}
+            </View>
+          </View>
         )}
-        <PillButton label="Salir" tone="danger" onPress={onLogout} />
-      </View>
+        ListFooterComponent={<View style={{ height: 24 }} />}
+      />
     </View>
   );
 }
 
-function SubHeader({ title, right }: { title: string; right?: React.ReactNode }) {
-  return (
-    <View
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderColor: "#ECECEC",
-        backgroundColor: "#F9FAFB",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: 8,
-      }}
-    >
-      <Text style={{ fontSize: 18, fontWeight: "800" }}>{title}</Text>
-      {right}
-    </View>
-  );
-}
-
+/* --------- UI helpers --------- */
 function PillButton({
   label,
   onPress,
@@ -543,8 +518,7 @@ function PillButton({
     secondary: { bg: "#F1F5F9", bg2: "#E2E8F0", fg: "#0F172A" },
     warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#fff" },
     danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#fff" },
-  } as const;
-  const p = palette[tone];
+  }[tone];
 
   return (
     <Pressable
@@ -554,88 +528,91 @@ function PillButton({
         paddingHorizontal: 14,
         paddingVertical: 10,
         borderRadius: 999,
-        backgroundColor: disabled ? "#CBD5E1" : pressed ? p.bg2 : p.bg,
-        opacity: disabled ? 0.7 : 1,
+        backgroundColor: disabled ? "#CBD5E1" : pressed ? palette.bg2 : palette.bg,
       })}
     >
-      <Text style={{ color: p.fg, fontWeight: "800" }}>{label.toUpperCase()}</Text>
+      <Text style={{ color: palette.fg, fontWeight: "800" }}>{label.toUpperCase()}</Text>
     </Pressable>
   );
 }
 
-function Banner({ text, tone = "info" }: { text: string; tone?: "info" | "success" | "error" }) {
-  const map = {
-    info: { bg: "#EFF6FF", bd: "#DBEAFE", fg: "#1E40AF" },
-    success: { bg: "#ECFDF5", bd: "#D1FAE5", fg: "#065F46" },
-    error: { bg: "#FEF2F2", bd: "#FECACA", fg: "#991B1B" },
-  } as const;
-  const p = map[tone];
-  return (
-    <View style={{ padding: 10, borderRadius: 12, backgroundColor: p.bg, borderWidth: 1, borderColor: p.bd }}>
-      <Text style={{ color: p.fg }}>{text}</Text>
-    </View>
-  );
-}
+function StatusBadge({ status }: { status?: TaskStatus }) {
+  const key = String(status || "OPEN").toUpperCase();
 
-function StatusBadge({ status }: { status: TaskStatus }) {
-  const map: Record<TaskStatus, { bg: string; fg: string }> = {
-    OPEN: { bg: "#E6F4FF", fg: "#0958D9" },
-    IN_PROGRESS: { bg: "#FFF4E5", fg: "#B25E09" },
-    DONE: { bg: "#E6FFED", fg: "#136F3A" },
-    ARCHIVED: { bg: "#F1F5F9", fg: "#0F172A" },
+  const palette: Record<string, { bg: string; fg: string }> = {
+    OPEN:        { bg: "#EFF6FF", fg: "#1D4ED8" },
+    IN_PROGRESS: { bg: "#FEF3C7", fg: "#92400E" },
+    DONE:        { bg: "#E6FFED", fg: "#136F3A" },
+    ARCHIVED:    { bg: "#F1F5F9", fg: "#475569" },
+    DEFAULT:     { bg: "#F1F5F9", fg: "#0F172A" },
   };
-  const p = map[status];
+
+  const { bg, fg } = palette[key] ?? palette.DEFAULT;
+
   return (
-    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: p.bg }}>
-      <Text style={{ color: p.fg, fontWeight: "800", fontSize: 12 }}>{status}</Text>
+    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: bg }}>
+      <Text style={{ color: fg, fontWeight: "800", fontSize: 12 }}>
+        {key.replaceAll("_", " ")}
+      </Text>
     </View>
   );
 }
 
-function AssigneeSelector({
-  assigneeId,
-  setAssigneeId,
-  members,
-  membersMsg,
+function Chip({
+  label,
+  tone = "secondary",
 }: {
-  assigneeId: string;
-  setAssigneeId: (v: string) => void;
-  members: Member[];
-  membersMsg?: string;
+  label: string;
+  tone?: "primary" | "secondary" | "warning";
 }) {
-  if (Platform.OS === "web") {
-    return (
-      <View style={{ marginBottom: 4 }}>
-        <Text style={{ fontWeight: "700", marginBottom: 6 }}>Responsable</Text>
-        <select
-          value={assigneeId}
-          onChange={(e) => setAssigneeId(e.currentTarget.value)}
-          style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
-        >
-          <option value="">— Sin responsable —</option>
-          {members.map((m) => (
-            <option key={m.id} value={String(m.id)}>
-              {(m.fullName || m.email) + " · " + m.email}
-            </option>
-          ))}
-        </select>
-        {!!membersMsg && <Text style={{ color: "red", marginTop: 4 }}>{membersMsg}</Text>}
-      </View>
-    );
-  }
-  // Nativo
+  const palette = {
+    primary: { bg: "#EEF2FF", fg: "#3730A3" },
+    secondary: { bg: "#F1F5F9", fg: "#0F172A" },
+    warning: { bg: "#FFFBEB", fg: "#92400E" },
+  }[tone];
   return (
-    <View style={{ borderWidth: 1, borderRadius: 10, borderColor: "#E5E7EB" }}>
-      <Picker selectedValue={assigneeId} onValueChange={(val) => setAssigneeId(String(val))}>
-        <Picker.Item label="— Sin responsable —" value="" />
-        {members.map((m) => (
-          <Picker.Item
-            key={m.id}
-            label={`${m.fullName || m.email} · ${m.email}`}
-            value={String(m.id)}
-          />
-        ))}
-      </Picker>
+    <View
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: palette.bg,
+      }}
+    >
+      <Text style={{ color: palette.fg, fontWeight: "700" }}>{label}</Text>
     </View>
   );
+}
+
+async function notifyTaskAssigned({
+  assigneeId,
+  taskId,
+  title,
+}: { assigneeId?: string; taskId: string; title: string }) {
+  try {
+    // 1) Notificación real por backend (recomendado)
+    console.log("va a ennviar el push");
+    if (assigneeId) {
+      await apiAuth(`/notify/task-assigned`, "POST", { assigneeId, taskId, title });
+    }
+
+    // 2) *** Modo prueba local *** (no depende del backend)
+    const body = "Tienes una nueva tarea pendiente";
+    const data = { taskId };
+
+    if (Platform.OS === "web") {
+      await webNotify("Nueva tarea asignada", body, data);
+    } else {
+      const ok = await ensureNativeNotificationPermission();
+      if (ok) {
+        await Notifications.scheduleNotificationAsync({
+          content: { title: "Nueva tarea asignada", body, data },
+          trigger: null,
+        });
+      }
+    }
+  } catch (e) {
+    // no rompas el flujo si falla el aviso
+    console.warn("notifyTaskAssigned error", e);
+  }
 }

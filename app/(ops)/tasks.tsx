@@ -1,29 +1,34 @@
-// app/(ops)/tasks.tsx – Kanban/List con Adjuntos (presign→PUT→complete) + Comentarios
-
+// app/(ops)/tasks.tsx – Kanban/List con Adjuntos (presign→PUT→complete) + Comentarios + Modal Preview (expo-video + cámara)
+import { AuthImgWeb, AuthVideoWeb } from "@/components/auth-media-web";
 import { apiAuth } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { Picker } from "@react-native-picker/picker";
-import React, { useEffect, useMemo, useState } from "react";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from "expo-media-library";
+import { useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
+import { VideoView, useVideoPlayer } from "expo-video";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-
-// Upload (nativo)
-import * as FileSystem from "expo-file-system";
-import type { ImagePickerAsset } from "expo-image-picker";
-import * as ImagePicker from "expo-image-picker";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 /* ======================= Tipos ======================= */
-
-type TaskStatus = "OPEN" | "IN_PROGRESS" | "DONE" | "CANCELLED";
+type TaskStatus = "OPEN" | "IN_PROGRESS" | "DONE";
 type Priority = "LOW" | "MEDIUM" | "HIGH";
 
 type Task = {
@@ -35,6 +40,7 @@ type Task = {
   priority?: Priority;
   dueDate?: string;
   assigneeId?: string;
+  description?: string;
 };
 
 type Member = { id: string; fullName?: string; email: string };
@@ -44,7 +50,7 @@ type Attachment = {
   key: string;
   contentType: string;
   size?: number;
-  url: string; // presigned GET url
+  url: string;
 };
 
 type PresignResp = { key: string; uploadUrl: string };
@@ -58,8 +64,7 @@ type CommentDto = {
   createdAt: number | string;
 };
 
-/* ======================= Helpers comunes ======================= */
-
+/* ======================= Helpers ======================= */
 function guessMimeFromName(name?: string | null): string {
   const ext = name?.split(".").pop()?.toLowerCase();
   switch (ext) {
@@ -78,168 +83,144 @@ function guessMimeFromName(name?: string | null): string {
       return "application/pdf";
     case "mp4":
       return "video/mp4";
+    case "mov":
+      return "video/quicktime";
+    case "txt":
+      return "text/plain; charset=utf-8";
+    case "csv":
+      return "text/csv; charset=utf-8";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "ppt":
+      return "application/vnd.ms-powerpoint";
+    case "pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
     default:
       return "application/octet-stream";
   }
 }
 
-// baseURL de apiAuth: http://localhost:8088/condos/api/board
-// ===== Comentarios
+function filenameFromKeyOrUrl(key?: string, url?: string) {
+  const raw = key || url || "archivo";
+  const part = raw.split("?")[0];
+  const name = part.split("/").pop() || "archivo";
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function ensureExt(baseName: string, mime?: string) {
+  const hasExt = /\.[a-z0-9]{2,5}$/i.test(baseName);
+  if (hasExt) return baseName;
+  if (mime?.includes("pdf")) return baseName + ".pdf";
+  if (mime?.includes("word")) return baseName + ".docx";
+  if (mime?.includes("sheet")) return baseName + ".xlsx";
+  if (mime?.includes("presentation")) return baseName + ".pptx";
+  if (mime?.includes("text")) return baseName + ".txt";
+  return baseName;
+}
+
+function safeDownloadName(att: Attachment) {
+  const raw = filenameFromKeyOrUrl(att.key, att.url);
+  return ensureExt(raw, att.contentType);
+}
+
+/* ======================= API ======================= */
 async function listComments(boardId: string, taskId: string) {
-  return apiAuth(
-    `/board/${boardId}/tasks/${taskId}/comments?page=0&size=50`,
-    "GET"
-  ) as Promise<CommentDto[]>;
+  return apiAuth(`/board/${boardId}/tasks/${taskId}/comments?page=0&size=50`, "GET") as Promise<CommentDto[]>;
 }
-async function postComment(
-  boardId: string,
-  taskId: string,
-  authorId: string,
-  text: string
-) {
-  return apiAuth(`/board/${boardId}/tasks/${taskId}/comments`, "POST", {
-    authorId,
-    text,
-  }) as Promise<CommentDto>;
+async function postComment(boardId: string, taskId: string, authorId: string, text: string) {
+  return apiAuth(`/board/${boardId}/tasks/${taskId}/comments`, "POST", { authorId, text }) as Promise<CommentDto>;
 }
-
-// ===== Adjuntos
 async function fetchTaskAttachments(boardId: string, taskId: string) {
-  return apiAuth(`/board/${boardId}/tasks/${taskId}/attachments`, "GET") as Promise<
-    Attachment[]
-  >;
+  return apiAuth(`/board/${boardId}/tasks/${taskId}/attachments`, "GET") as Promise<Attachment[]>;
 }
-async function presignAttachment(
-  boardId: string,
-  taskId: string,
-  contentType: string,
-  size: number
-) {
-  return (await apiAuth(
-    `/board/${boardId}/tasks/${taskId}/attachments/presign`,
-    "POST",
-    { contentType, size }
-  )) as PresignResp;
+async function presignAttachment(boardId: string, taskId: string, contentType: string, size: number) {
+  return apiAuth(`/board/${boardId}/tasks/${taskId}/attachments/presign`, "POST", { contentType, size }) as Promise<PresignResp>;
 }
-async function completeAttachment(
-  boardId: string,
-  taskId: string,
-  key: string,
-  contentType: string,
-  size: number
-) {
-  return (await apiAuth(
-    `/board/${boardId}/tasks/${taskId}/attachments/complete`,
-    "POST",
-    { key, contentType, size }
-  )) as CompleteResp;
+async function completeAttachment(boardId: string, taskId: string, key: string, contentType: string, size: number) {
+  return apiAuth(`/board/${boardId}/tasks/${taskId}/attachments/complete`, "POST", { key, contentType, size }) as Promise<CompleteResp>;
 }
+/* ======================= Pantalla principal ======================= */
 
-/* ======================= Pantalla ======================= */
-
-const ALL_STATUS: TaskStatus[] = ["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"];
+const ALL_STATUS: TaskStatus[] = ["OPEN", "IN_PROGRESS", "DONE"];
+const getToken = () => useApp.getState().token;
 
 export default function OpsTasks() {
-  const { me, logout } = useApp();
-  const orgId = useMemo(
-    () => me?.orgId ?? me?.orgs?.[0]?.orgId ?? "",
-    [me]
-  );
-  const meId = useMemo(
-    () => String(me?.id ?? me?.userId ?? me?.email ?? "me"),
-    [me]
-  );
+  const { width, height } = useWindowDimensions();
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024 && width < 1440;
+  const isWide = width >= 1440;
+  const isMobile = !isTablet && !isDesktop && !isWide;
 
-  // filtros / estado
-  const [q, setQ] = useState("");
+  const HEADER_H = isMobile ? 120 : 96;
+  const CONTENT_H = Math.max(320, height - HEADER_H);
+
+  const [kanban, setKanban] = useState(!isMobile);
+  const { me, logout } = useApp();
+  const router = useRouter();
+
+  const orgId = useMemo(() => me?.orgId ?? me?.orgs?.[0]?.orgId ?? "", [me]);
+  const meId = useMemo(() => String(me?.id ?? me?.userId ?? me?.email ?? "me"), [me]);
+
   const [status, setStatus] = useState<"" | TaskStatus>("");
-  const [overdue, setOverdue] = useState(false);
   const [items, setItems] = useState<Task[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [kanban, setKanban] = useState(true);
 
-  // 🔹 Adjuntos en memoria (por tarea)
-  const [attachmentsByTask, setAttachmentsByTask] = useState<
-    Record<string, Attachment[]>
-  >({});
+  const [attachmentsByTask, setAttachmentsByTask] = useState<Record<string, Attachment[]>>({});
+  const [commentsByTask, setCommentsByTask] = useState<Record<string, CommentDto[]>>({});
+
   const refetchTaskAttachments = async (boardId: string, taskId: string) => {
     const list = await fetchTaskAttachments(boardId, taskId);
-    // (opcional) cache-bust imágenes:
-    // const withBust = list.map(a => ({ ...a, url: `${a.url}&t=${Date.now()}` }));
     setAttachmentsByTask((prev) => ({ ...prev, [taskId]: list }));
   };
-  const addAttachment = (taskId: string, att: Attachment) =>
-    setAttachmentsByTask((prev) => ({
-      ...prev,
-      [taskId]: [att, ...(prev[taskId] ?? [])],
-    }));
 
-  // 🔹 Comentarios en memoria (por tarea)
-  const [commentsByTask, setCommentsByTask] = useState<
-    Record<string, CommentDto[]>
-  >({});
+  const addAttachment = (taskId: string, att: Attachment) =>
+    setAttachmentsByTask((prev) => ({ ...prev, [taskId]: [att, ...(prev[taskId] ?? [])] }));
+
   const refetchComments = async (boardId: string, taskId: string) => {
     const list = await listComments(boardId, taskId);
     setCommentsByTask((prev) => ({ ...prev, [taskId]: list }));
   };
 
-  // miembros (resolver assignee → nombre)
   const [members, setMembers] = useState<Member[]>([]);
-  const memberById = useMemo(
-    () => new Map(members.map((m) => [m.id, m])),
-    [members]
-  );
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const displayAssignee = (id?: string) => {
     if (!id) return "—";
     const m = memberById.get(id);
     return m ? m.fullName || m.email : id;
   };
 
-  const fmt = (iso?: string) =>
-    iso ? new Date(iso).toLocaleString() : "—";
-  const statusStyle: Record<
-    TaskStatus,
-    { bg: string; fg: string; title: string }
-  > = {
+  const fmt = (iso?: string) => (iso ? new Date(iso).toLocaleString() : "—");
+
+  const statusStyle: Record<TaskStatus, { bg: string; fg: string; title: string }> = {
     OPEN: { bg: "#EFF6FF", fg: "#1D4ED8", title: "Abiertas" },
     IN_PROGRESS: { bg: "#FFF7ED", fg: "#B45309", title: "En progreso" },
     DONE: { bg: "#ECFDF5", fg: "#065F46", title: "Completadas" },
-    CANCELLED: { bg: "#FEF2F2", fg: "#991B1B", title: "Canceladas" },
   };
-  const cardShadow =
-    Platform.OS === "web"
-      ? {
-          boxShadow:
-            "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10)",
-        }
-      : {};
 
-  // miembros activos
+  const cardShadow =
+    Platform.OS === "web" ? { boxShadow: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10)" } : {};
+
+  // 👉 Listener para navegar cuando el usuario toca la notificación
+  // cargar miembros
   useEffect(() => {
     const loadMembers = async () => {
       if (!orgId) return;
       try {
-        const raw = await apiAuth(
-          `/user/users?orgId=${encodeURIComponent(
-            orgId
-          )}&status=ACTIVE`,
-          "GET"
-        );
+        const raw = await apiAuth(`/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE`, "GET");
         const list = Array.isArray(raw) ? raw : raw?.content ?? [];
-        setMembers(
-          list.map((u: any) => ({
-            id: String(u.id ?? u._id),
-            fullName: u.fullName,
-            email: u.email,
-          }))
-        );
-      } catch {}
+        setMembers(list.map((u: any) => ({ id: String(u.id ?? u._id), fullName: u.fullName, email: u.email })));
+      } catch { }
     };
     loadMembers();
   }, [orgId]);
 
-  // cargar mis tareas
   const load = async () => {
     if (!orgId) return;
     setBusy(true);
@@ -250,12 +231,9 @@ export default function OpsTasks() {
         assigneeId: "me",
         page: "0",
         size: "100",
-        ...(q ? { q } : {}),
         ...(status ? { status } : {}),
-        ...(overdue ? { overdue: "true" } : {}),
       }).toString();
 
-      // ✅ TaskController: GET /condos/api/board/tasks
       const raw = await apiAuth(`/board/tasks?${qs}`, "GET");
       const list = Array.isArray(raw) ? raw : raw?.content ?? [];
       const mapped: Task[] = list.map((t: any) => ({
@@ -267,10 +245,9 @@ export default function OpsTasks() {
         priority: t.priority as Priority | undefined,
         dueDate: t.dueDate,
         assigneeId: t.assigneeId ? String(t.assigneeId) : undefined,
+        description: t.description ?? t.details ?? "",
       }));
       setItems(mapped);
-
-      // precarga: adjuntos + comentarios de las tarjetas visibles
       for (const it of mapped) {
         refetchTaskAttachments(it.boardId, it.id);
         refetchComments(it.boardId, it.id);
@@ -284,981 +261,1017 @@ export default function OpsTasks() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, status, overdue]);
+  }, [orgId, status]);
 
-  // actualizar estado
   const updateStatus = async (id: string, next: TaskStatus) => {
     try {
-      // ✅ TaskController: PATCH /tasks/{id}/status
-      await apiAuth(`/tasks/${id}/status`, "PATCH", { status: next });
-      setItems((prev) =>
-        prev.map((it) => (it.id === id ? { ...it, status: next } : it))
-      );
+      await apiAuth(`/board/tasks/${id}/status`, "PATCH", { status: next });
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: next } : it)));
     } catch (e: any) {
       setMsg(e.message ?? String(e));
     }
   };
 
   const byStatus = useMemo(() => {
-    const map: Record<TaskStatus, Task[]> = {
-      OPEN: [],
-      IN_PROGRESS: [],
-      DONE: [],
-      CANCELLED: [],
-    };
+    const map: Record<TaskStatus, Task[]> = { OPEN: [], IN_PROGRESS: [], DONE: [] };
     for (const t of items) map[t.status].push(t);
     return map;
   }, [items]);
 
-  /* ------------------------------- render ----------------------------------- */
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={{ flex: 1, backgroundColor: "#FAFAFB" }}>
-        {/* TOP BAR */}
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderBottomWidth: 1,
-            borderColor: "#ECECEC",
-            backgroundColor: "#FFFFFF",
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+      <TopBar
+        email={me?.email}
+        onMenu={() => router.push("/home")}
+        onLogout={() => logout()}
+      />
+      {/* HEADER */}
+      <View
+        style={{
+          height: 56,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 16,
+          borderBottomWidth: 1,
+          borderColor: "#E5E7EB",
+          backgroundColor: "#F9FAFB",
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: "600" }}>Tareas</Text>
+      </View>
+
+      {/* CONTENIDO */}
+      {busy ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#2563EB" />
+        </View>
+      ) : msg ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ color: "red" }}>{msg}</Text>
+        </View>
+      ) : (
+        <Kanban
+          byStatus={byStatus}
+          statusStyle={statusStyle}
+          attachmentsByTask={attachmentsByTask}
+          commentsByTask={commentsByTask}
+          refetchTaskAttachments={refetchTaskAttachments}
+          addAttachment={addAttachment}
+          refetchComments={refetchComments}
+          displayAssignee={displayAssignee}
+          fmt={fmt}
+          cardShadow={cardShadow}
+          updateStatus={updateStatus}
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+/* ======================= Detección de tipo de archivo ======================= */
+function isImage(att: Attachment) {
+  const ct = att.contentType.toLowerCase();
+  return ct.startsWith("image/") || /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(att.url);
+}
+function isVideo(att: Attachment) {
+  const ct = att.contentType.toLowerCase();
+  return ct.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(att.url);
+}
+function isPdf(att: Attachment) {
+  return att.contentType === "application/pdf" || /\.pdf$/i.test(att.url);
+}
+function isText(att: Attachment) {
+  return att.contentType.startsWith("text/") || /\.(txt|csv|log)$/i.test(att.url);
+}
+function isOffice(att: Attachment) {
+  const ct = att.contentType;
+  return (
+    [
+      "application/msword",
+      "application/vnd.ms-excel",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ].includes(ct) ||
+    /\.(docx?|xlsx?|pptx?)$/i.test(att.url)
+  );
+}
+function officeViewerUrl(url: string) {
+  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+}
+/* ======================= VideoThumb (fix) ======================= */
+// Miniatura
+// Miniatura (nativo): descarga con headers y luego replace()
+function VideoThumb({ uri, width, height }: { uri: string; width: number; height: number }) {
+  const [localUri, setLocalUri] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const token = useApp.getState().token || "";
+        const dest = `${FileSystem.cacheDirectory}thumb-${encodeURIComponent(uri)}.mp4`;
+        const res = await FileSystem.downloadAsync(uri, dest, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (alive) setLocalUri(res.uri);
+      } catch {
+        if (alive) setLocalUri(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [uri]);
+
+  // 👇 SIEMPRE creamos el player (sin fuente inicial)
+  const player = useVideoPlayer(undefined as any, (p) => {
+    p.loop = false;
+    p.muted = true;
+  });
+
+  // Cuando ya hay archivo local, asignamos la fuente
+  React.useEffect(() => {
+    if (localUri) player.replace({ uri: localUri });
+  }, [localUri, player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={{ width, height, borderRadius: 10, backgroundColor: "#000" }}
+      contentFit="cover"
+    />
+  );
+}
+
+/* ======================= Modal de Previsualización (fix) ======================= */
+function AttachmentPreviewModal({
+  visible,
+  onClose,
+  attachment,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  attachment?: Attachment | null;
+}) {
+  if (!attachment) return null;
+
+  const isWeb = Platform.OS === "web";
+  // Carga perezosa de helpers web (no se evalúa en nativo)
+  const Web = React.useMemo(
+    () => (isWeb ? require("@/components/auth-media-web") : null),
+    [isWeb]
+  );
+  const useTextWithAuth = isWeb ? Web!.useTextWithAuth : () => undefined;
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+  const apiFileUrl = (att: Attachment | string) =>
+    typeof att === "string"
+      ? att.includes("/minio/") ? `${API_BASE}/condos/api/files/${att.split("/condos-attachments/")[1]}` : att
+      : att.url.includes("/minio/") ? `${API_BASE}/condos/api/files/${att.key}` : att.url;
+
+  const urlForView = apiFileUrl(attachment);
+
+  const _isImage = isImage(attachment);
+  const _isVideo = isVideo(attachment);
+  const _isPdf   = isPdf(attachment);
+  const _isText  = isText(attachment);
+  const _isOffice= isOffice(attachment);
+
+  const docUrl   = _isOffice ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(urlForView)}` : urlForView;
+  const textBody = useTextWithAuth(urlForView);
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" }}>
+        <Pressable
+          onPress={onClose}
+          style={{ position: "absolute", top: 50, right: 20, zIndex: 10, backgroundColor: "#fff",
+                   borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 }}
         >
-          <Text style={{ fontSize: 18, fontWeight: "800" }}>Condos</Text>
-          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-            {!!me?.email && (
-              <Text
-                style={{
-                  color: "#475569",
-                  backgroundColor: "#F1F5F9",
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: "700",
-                }}
-              >
-                {me.email}
+          <Text style={{ color: "#111", fontWeight: "700" }}>Cerrar</Text>
+        </Pressable>
+
+        {_isImage && (
+          isWeb ? (
+            <Web.AuthImgWeb
+              url={urlForView}
+              width={0}
+              height={0}
+              style={{ width: "90%", height: "70%", borderRadius: 12, objectFit: "contain" }}
+            />
+          ) : (
+            <Image
+              source={{ uri: attachment.url, headers: { Authorization: `Bearer ${useApp.getState().token ?? ""}` } }}
+              style={{ width: "90%", height: "70%", borderRadius: 12 }}
+              resizeMode="contain"
+            />
+          )
+        )}
+
+        {_isVideo && (
+          isWeb ? (
+            <Web.AuthVideoWeb
+              url={urlForView}
+              width={0}
+              height={0}
+              controls
+              style={{ width: "90%", height: "70%", borderRadius: 12, objectFit: "contain" }}
+            />
+          ) : (
+            <VideoPreview uri={attachment.url} visible={visible} />
+          )
+        )}
+
+        {_isText && (
+          isWeb ? (
+            <div style={{ width: "90%", height: "70%", background: "#fff", color: "#111",
+                          borderRadius: 12, overflow: "auto", padding: 16 }}>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 13 }}>
+                {textBody ?? "Cargando…"}
+              </pre>
+            </div>
+          ) : (
+            <ScrollView style={{ width: "90%", height: "70%", backgroundColor: "#fff", borderRadius: 12, padding: 16 }}>
+              <Text style={{ color: "#111", fontFamily: "Menlo" }}>
+                {/** En nativo, si el endpoint exige JWT, mejor descarga y muestra con otra estrategia */}
+                Texto no soportado via fetch aquí.
               </Text>
-            )}
-            <PillButton label="Salir" tone="danger" onPress={logout} />
-          </View>
-        </View>
+            </ScrollView>
+          )
+        )}
 
-        {/* SUB HEADER */}
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderBottomWidth: 1,
-            borderColor: "#ECECEC",
-            backgroundColor: "#F9FAFB",
-            gap: 8,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <TextInput
-              placeholder="Buscar…"
-              value={q}
-              onChangeText={setQ}
-              onSubmitEditing={load}
-              style={{
-                borderWidth: 1,
-                borderColor: "#E5E7EB",
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                paddingVertical: Platform.OS === "web" ? 10 : 12,
-                minWidth: 180,
-              }}
-            />
-            {Platform.OS === "web" ? (
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.currentTarget.value as any)}
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid #E5E7EB" as any,
-                }}
-              >
-                <option value="">Todos</option>
-                {ALL_STATUS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <View
-                style={{ borderWidth: 1, borderRadius: 10, borderColor: "#E5E7EB" }}
-              >
-                <Picker
-                  selectedValue={status}
-                  onValueChange={(v) => setStatus(v as any)}
-                >
-                  <Picker.Item label="Todos" value="" />
-                  {ALL_STATUS.map((s) => (
-                    <Picker.Item key={s} label={s} value={s} />
-                  ))}
-                </Picker>
-              </View>
-            )}
-            <PillButton
-              label={overdue ? "Vencidas ✓" : "Vencidas"}
-              tone={overdue ? "warning" : "secondary"}
-              onPress={() => setOverdue((v) => !v)}
-            />
-            <PillButton label="Recargar" onPress={load} />
-            <PillButton
-              label={kanban ? "Vista lista" : "Vista kanban"}
-              tone="secondary"
-              onPress={() => setKanban((v) => !v)}
-            />
-            {busy && <ActivityIndicator />}
-          </View>
-        </View>
+        {_isPdf && (
+          isWeb ? (
+            <Web.AuthPdfIframeWeb url={urlForView} style={{ width: "90%", height: "70%" }} />
+          ) : (
+            <View style={{ width: "90%", height: "70%", borderRadius: 12, overflow: "hidden", backgroundColor: "#fff" }}>
+              <WebView source={{ uri: urlForView }} startInLoadingState />
+            </View>
+          )
+        )}
 
-        {/* CONTENIDO */}
-        {kanban ? (
-          <Kanban
-            byStatus={byStatus}
-            statusStyle={statusStyle}
-            cardShadow={cardShadow}
-            displayAssignee={displayAssignee}
-            fmt={fmt}
-            onDrop={(taskId, newStatus) => updateStatus(taskId, newStatus)}
-            getAttachments={(id) => attachmentsByTask[id] ?? []}
-            onAttachmentAdded={(id, att) => addAttachment(id, att)}
-            onRefetch={(t) => refetchTaskAttachments(t.boardId, t.id)}
-            // comentarios
-            getComments={(id) => commentsByTask[id] ?? []}
-            onRefetchComments={(t) => refetchComments(t.boardId, t.id)}
-            meId={meId}
-          />
-        ) : (
-          <ListView
-            items={items}
-            statusStyle={statusStyle}
-            cardShadow={cardShadow}
-            displayAssignee={displayAssignee}
-            fmt={fmt}
-            onQuickAdvance={(id, current) =>
-              updateStatus(id, current === "OPEN" ? "IN_PROGRESS" : "DONE")
-            }
-            busy={busy}
-            msg={msg}
-            getAttachments={(id) => attachmentsByTask[id] ?? []}
-            onAttachmentAdded={(id, att) => addAttachment(id, att)}
-            onRefetch={(t) => refetchTaskAttachments(t.boardId, t.id)}
-            // comentarios
-            getComments={(id) => commentsByTask[id] ?? []}
-            onRefetchComments={(t) => refetchComments(t.boardId, t.id)}
-            meId={meId}
-          />
+        {!_isImage && !_isVideo && !_isPdf && !_isText && !_isOffice && (
+          <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 12 }}>
+            <Text style={{ color: "#111", fontSize: 14, textAlign: "center" }}>
+              {filenameFromKeyOrUrl(attachment.key, attachment.url)}
+            </Text>
+            <Text style={{ color: "#6B7280", fontSize: 12, textAlign: "center", marginTop: 6 }}>
+              Tipo no soportado para preview. Usa “Descargar”.
+            </Text>
+          </View>
         )}
       </View>
-    </GestureHandlerRootView>
+    </Modal>
   );
 }
 
-/* ======================= Kanban ======================= */
-
-// Web DnD
-let DnD: any = {};
-if (Platform.OS === "web") {
-  try {
-    // @ts-ignore
-    const mod = require("@hello-pangea/dnd");
-    DnD = {
-      DragDropContext: mod.DragDropContext,
-      Droppable: mod.Droppable,
-      Draggable: mod.Draggable,
-    };
-  } catch {}
-}
-
-// Native DnD (opcional)
-let Drax: any = {};
-if (Platform.OS !== "web") {
-  try {
-    // @ts-ignore
-    const mod = require("react-native-drax");
-    Drax = {
-      DraxProvider: mod.DraxProvider,
-      DraxView: mod.DraxView,
-      DraxScrollView: mod.DraxScrollView,
-    };
-  } catch {}
-}
-
-function Kanban({
-  byStatus,
-  statusStyle,
-  cardShadow,
-  displayAssignee,
-  fmt,
-  onDrop,
-  getAttachments,
-  onAttachmentAdded,
-  onRefetch,
-  // comentarios
-  getComments,
-  onRefetchComments,
-  meId,
+/* ======================= Adjuntos (UI + carga web/nativo + cámara) ======================= */
+function TaskAttachments({
+  boardId,
+  taskId,
+  attachments,
+  refetchTaskAttachments,
+  addAttachment,
 }: {
-  byStatus: Record<TaskStatus, Task[]>;
-  statusStyle: Record<TaskStatus, { bg: string; fg: string; title: string }>;
-  cardShadow: any;
-  displayAssignee: (id?: string) => string;
-  fmt: (iso?: string) => string;
-  onDrop: (taskId: string, newStatus: TaskStatus) => void;
-  getAttachments: (taskId: string) => Attachment[];
-  onAttachmentAdded: (taskId: string, att: Attachment) => void;
-  onRefetch: (t: Task) => Promise<void>;
-  // comentarios
-  getComments: (taskId: string) => CommentDto[];
-  onRefetchComments: (t: Task) => Promise<void>;
-  meId: string;
+  boardId: string;
+  taskId: string;
+  attachments: Attachment[];
+  refetchTaskAttachments: (boardId: string, taskId: string) => Promise<void>;
+  addAttachment: (taskId: string, att: Attachment) => void;
 }) {
-  // WEB
-  if (Platform.OS === "web" && DnD.DragDropContext) {
-    const { DragDropContext, Droppable, Draggable } = DnD;
-    const columns: TaskStatus[] = ["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"];
+  const TILE_W = 160;
+  const TILE_H = 90;
+  const RAIL_H = TILE_H + 24; // alto fijo para que no empuje el layout
 
-    const handleDragEnd = (result: any) => {
-      const { destination, draggableId, source } = result || {};
-      if (!destination) return;
-      const destStatus = destination.droppableId as TaskStatus;
-      if (destination.droppableId === source?.droppableId) return;
-      onDrop(String(draggableId), destStatus);
-    };
+  const [preview, setPreview] = useState<Attachment | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
-    return (
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <View
-          style={{
-            flex: 1,
-            padding: 16,
-            rowGap: 12,
-            columnGap: 12,
-            ...(Platform.OS === "web"
-              ? { display: "flex", flexDirection: "row", overflowX: "auto" as any }
-              : {}),
-          }}
-        >
-          {columns.map((st) => (
-            <Droppable droppableId={st} key={st}>
-              {(provided: any, snapshot: any) => (
-                <View
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  style={{
-                    width: 320,
-                    backgroundColor: "#FFFFFF",
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderColor: snapshot.isDraggingOver ? "#BFDBFE" : "#E5E7EB",
-                    padding: 12,
-                  }}
-                >
-                  <ColumnHeader
-                    title={statusStyle[st].title}
-                    color={statusStyle[st].fg}
-                    bg={statusStyle[st].bg}
-                  />
+  const openPreview = (att: Attachment) => {
+    setPreview(att);
+    setModalVisible(true);
+  };
 
-                  {byStatus[st].map((t, idx) => (
-                    <Draggable draggableId={String(t.id)} index={idx} key={t.id}>
-                      {(dragProvided: any, dragSnapshot: any) => {
-                        const dragStyle = dragProvided.draggableProps.style || {};
-                        return (
-                          <View
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            {...dragProvided.dragHandleProps}
-                            style={{
-                              marginTop: 10,
-                              backgroundColor: "#fff",
-                              borderWidth: 1,
-                              borderColor: dragSnapshot.isDragging
-                                ? "#93C5FD"
-                                : "#F3F4F6",
-                              borderRadius: 12,
-                              padding: 10,
-                              ...(dragStyle as any),
-                            }}
-                          >
-                            <TaskCard
-                              t={t}
-                              displayAssignee={displayAssignee}
-                              fmt={fmt}
-                              attachments={getAttachments(t.id)}
-                              onAttachmentAdded={(att) =>
-                                onAttachmentAdded(t.id, att)
-                              }
-                              onRefetch={() => onRefetch(t)}
-                              comments={getComments(t.id)}
-                              onRefetchComments={() => onRefetchComments(t)}
-                              meId={meId}
-                            />
-                          </View>
-                        );
-                      }}
-                    </Draggable>
-                  ))}
+  const webInputRef = useRef<HTMLInputElement | null>(null);
+  const WEB_ACCEPT =
+    ".png,.jpg,.jpeg,.webp,.gif,.heic,.heif,.mp4,.mov,.webm,.mkv,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
 
-                  {provided.placeholder}
-                </View>
-              )}
-            </Droppable>
-          ))}
-        </View>
-      </DragDropContext>
-    );
-  }
+  const onPickWeb = async (file: File) => {
+    try {
+      const mime = file.type || guessMimeFromName(file.name);
+      const size = file.size ?? 0;
+      const { key, uploadUrl } = await presignAttachment(boardId, taskId, mime, size);
+      const up = await fetch(uploadUrl, {
+        method: "PUT", // o "PUT" si tu FilesController tiene @PutMapping("/**")
+        headers: {
+          "Content-Type": mime,
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        },
+        body: file,
+      });
+      if (!up.ok) throw new Error(`Upload failed: ${up.status}`);
+      const saved = await completeAttachment(boardId, taskId, key, mime, size);
+      addAttachment(taskId, saved);
+      await refetchTaskAttachments(boardId, taskId);
+      alert("✅ Adjuntado");
+    } catch (err: any) {
+      alert("Error subiendo: " + (err?.message ?? String(err)));
+    }
+  };
 
-  // Fallback simple (sin drag) – también sirve en nativo si no usas Drax
-  const columns: TaskStatus[] = ["OPEN", "IN_PROGRESS", "DONE", "CANCELLED"];
+  /* ======== Pick archivo o cámara en móvil ======== */
+  const pickAndUploadNative = async () => {
+    try {
+      const options = ["Usar cámara", "Elegir archivo", "Cancelar"];
+      const useCamera =
+        Platform.OS === "ios"
+          ? await new Promise<boolean>((resolve) => {
+            ActionSheetIOS.showActionSheetWithOptions(
+              { title: "Adjuntar archivo", options, cancelButtonIndex: 2 },
+              (idx) => resolve(idx === 0)
+            );
+          })
+          : true;
+
+      let fileUri: string | null = null;
+      let name = "";
+      let mime = "";
+      let size = 0;
+
+      if (useCamera) {
+        const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+        if (camPerm.status !== "granted") {
+          alert("Se necesita permiso para usar la cámara.");
+          return;
+        }
+        const camRes = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All });
+        if (!camRes.canceled && camRes.assets[0]) {
+          fileUri = camRes.assets[0].uri;
+          name = camRes.assets[0].fileName ?? "foto.jpg";
+          mime = camRes.assets[0].mimeType ?? "image/jpeg";
+          size = camRes.assets[0].fileSize ?? 0;
+        }
+      } else {
+        const res = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
+        if (!res.canceled && res.assets?.[0]) {
+          const f = res.assets[0];
+          fileUri = f.uri;
+          name = f.name ?? "archivo";
+          mime = f.mimeType ?? guessMimeFromName(f.name);
+          size = f.size ?? 0;
+        }
+      }
+
+      if (!fileUri) return;
+
+      // 1) Pides URL de subida a tu API
+      const { key, uploadUrl } = await presignAttachment(boardId, taskId, mime, size);
+      // 3) SUBIR binario con expo-file-system (NO usar fetch(fileUri).blob())
+      const result = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+        httpMethod: "PUT", // o "POST" si tu FilesController usa @PostMapping
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          "Content-Type": mime,
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        },
+      });
+
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Upload failed: ${result.status} ${result.body || ""}`);
+      }
+
+      // 4) Completar en backend y refrescar lista
+      const saved = await completeAttachment(boardId, taskId, key, mime, size);
+      addAttachment(taskId, saved);
+      await refetchTaskAttachments(boardId, taskId);
+      alert("✅ Adjuntado");
+    } catch (e: any) {
+      alert("Error subiendo: " + (e?.message ?? String(e)));
+    }
+  };
+
   return (
-    <ScrollView
-      horizontal
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, gap: 12 }}
-    >
-      {columns.map((st) => (
-        <View
-          key={st}
-          style={{
-            width: 320,
-            backgroundColor: "#FFFFFF",
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: "#E5E7EB",
-            padding: 12,
-          }}
-        >
-          <ColumnHeader
-            title={statusStyle[st].title}
-            color={statusStyle[st].fg}
-            bg={statusStyle[st].bg}
-          />
-          {byStatus[st].map((t) => (
-            <View
-              key={t.id}
-              style={{
-                marginTop: 10,
-                backgroundColor: "#fff",
-                borderWidth: 1,
-                borderColor: "#F3F4F6",
-                borderRadius: 12,
-                padding: 10,
-              }}
-            >
-              <TaskCard
-                t={t}
-                displayAssignee={displayAssignee}
-                fmt={fmt}
-                attachments={getAttachments(t.id)}
-                onAttachmentAdded={(att) => onAttachmentAdded(t.id, att)}
-                onRefetch={() => onRefetch(t)}
-                comments={getComments(t.id)}
-                onRefetchComments={() => onRefetchComments(t)}
-                meId={meId}
-              />
-            </View>
-          ))}
-        </View>
-      ))}
-    </ScrollView>
-  );
-}
+    <View style={{ marginTop: 8 }}>
+      <Text style={{ fontSize: 13, fontWeight: "600", marginBottom: 4 }}>Adjuntos</Text>
 
-/* ======================= Lista ======================= */
-
-function ListView({
-  items,
-  statusStyle,
-  cardShadow,
-  displayAssignee,
-  fmt,
-  onQuickAdvance,
-  busy,
-  msg,
-  getAttachments,
-  onAttachmentAdded,
-  onRefetch,
-  // comentarios
-  getComments,
-  onRefetchComments,
-  meId,
-}: {
-  items: Task[];
-  statusStyle: Record<TaskStatus, { bg: string; fg: string; title: string }>;
-  cardShadow: any;
-  displayAssignee: (id?: string) => string;
-  fmt: (iso?: string) => string;
-  onQuickAdvance: (id: string, current: TaskStatus) => void;
-  busy: boolean;
-  msg: string;
-  getAttachments: (taskId: string) => Attachment[];
-  onAttachmentAdded: (taskId: string, att: Attachment) => void;
-  onRefetch: (t: Task) => Promise<void>;
-  // comentarios
-  getComments: (taskId: string) => CommentDto[];
-  onRefetchComments: (t: Task) => Promise<void>;
-  meId: string;
-}) {
-  return (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-    >
-      {!!msg && (
-        <View
-          style={{
-            padding: 10,
-            borderRadius: 12,
-            backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
-            borderWidth: 1,
-            borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
-            marginBottom: 12,
-          }}
-        >
-          <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>
-            {msg}
-          </Text>
-        </View>
-      )}
+      {/* 🔒 Contenedor con alto fijo (scroll interno horizontal) */}
       <View
         style={{
-          backgroundColor: "#fff",
-          padding: 12,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: "#EAEAEA",
-          ...cardShadow,
+          height: RAIL_H,
+          width: "100%",
+          borderRadius: 10,
+          overflow: "hidden",
         }}
       >
-        <Text style={{ fontWeight: "800" }}>Mis tareas</Text>
-        {busy && <ActivityIndicator style={{ marginTop: 6 }} />}
-      </View>
-
-      {items.map((t) => {
-        const pal = statusStyle[t.status];
-        const isOverdue =
-          t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "DONE";
-        return (
-          <View
-            key={t.id}
-            style={{
-              marginTop: 10,
-              backgroundColor: "fff",
-              borderWidth: 1,
-              borderColor: "#F3F4F6",
-              borderRadius: 12,
-              padding: 10,
-              ...cardShadow,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ fontWeight: "800", fontSize: 16 }}>{t.title}</Text>
-              <View
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator
+  style={{
+    flex: 1,
+    ...(Platform.OS === "web" ? { overflowX: "scroll" as any } : {}),
+  }}
+          contentContainerStyle={{
+            alignItems: "center",
+            paddingHorizontal: 6,
+            gap: 12,
+            height: RAIL_H,
+          }}
+        >
+          {attachments.map((att) => {
+            const isImg = isImage(att);
+            const isVid = isVideo(att);
+            const isDoc = isPdf(att) || isText(att) || isOffice(att);
+            const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+            const apiFileUrl = (att: Attachment | string) =>
+              typeof att === "string"
+                ? att.includes("/minio/") ? `${API_BASE}/condos/api/files/${att.split("/condos-attachments/")[1]}` : att
+                : att.url.includes("/minio/") ? `${API_BASE}/condos/api/files/${att.key}` : att.url;
+            const urlForView = apiFileUrl(att);
+            return (
+              <Pressable
+                key={att.id ?? att.key}
+                onPress={() => openPreview(att)}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderRadius: 999,
-                  backgroundColor: pal.bg,
+                  width: TILE_W,
+                  height: TILE_H,
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  backgroundColor: "#000",
+                  justifyContent: "center",
+                  alignItems: "center",
                 }}
               >
-                <Text style={{ color: pal.fg, fontWeight: "800", fontSize: 12 }}>
-                  {t.status}
-                </Text>
-              </View>
-            </View>
-            <View style={{ marginTop: 4, gap: 2 }}>
-              <Text style={{ color: "#475569" }}>
-                Tablero: {t.boardName ?? t.boardId}
-              </Text>
-              <Text style={{ color: "#64748B" }}>
-                Responsable: {displayAssignee(t.assigneeId)}
-              </Text>
-              <Text style={{ color: isOverdue ? "#B42318" : "#64748B" }}>
-                Vence: {fmt(t.dueDate)} {isOverdue ? "⏰" : ""}
-              </Text>
-            </View>
-            {t.status !== "DONE" && (
-              <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-                <PillButton
-                  label="Avanzar"
-                  onPress={() => onQuickAdvance(t.id, t.status)}
-                />
-              </View>
-            )}
+                {isImg ? (
+                  Platform.OS === "web" ? (
+                    // 👇 ahora usa <img> con blob + Authorization
+                    <AuthImgWeb
+                      url={urlForView}
+                      width={TILE_W}
+                      height={TILE_H}
+                      style={{ objectFit: "cover", borderRadius: 10 }}
+                    />
+                  ) : (
+                    <Image
+                      // en nativo puedes mandar headers en source
+                      source={{ uri: att.url, headers: { Authorization: `Bearer ${getToken()}` } }}
+                      style={{ width: TILE_W, height: TILE_H, borderRadius: 10 }}
+                      resizeMode="cover"
+                    />
+                  )
+                ) : isVid ? (
+                  Platform.OS === "web" ? (
+                    // 👇 video con blob + Authorization
+                    <AuthVideoWeb url={urlForView} width={TILE_W} height={TILE_H} />
+                  ) : (
+                    <VideoThumb uri={att.url} width={TILE_W} height={TILE_H} />
+                  )
+                ) : (
 
-            {/* Adjuntos */}
-            <View style={{ marginTop: 8 }}>
-              <TaskAttachments
-                task={t}
-                attachments={getAttachments(t.id)}
-                onAttachmentAdded={(att) => onAttachmentAdded(t.id, att)}
-                onRefetch={() => onRefetch(t)}
+                  <View style={{ alignItems: "center", justifyContent: "center", padding: 8 }}>
+                    <Text style={{ color: "#fff", fontSize: 30 }}>📄</Text>
+                    <Text
+                      style={{ color: "#fff", fontSize: 11, textAlign: "center", marginTop: 4 }}
+                      numberOfLines={2}
+                    >
+                      {filenameFromKeyOrUrl(att.key, att.url)}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+
+          {/* Botón agregar */}
+          {Platform.OS === "web" ? (
+            <View
+              style={{
+                width: TILE_W,
+                height: TILE_H,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                justifyContent: "center",
+                alignItems: "center",
+                position: "relative",
+                backgroundColor: "#fff",
+              }}
+            >
+              <input
+                ref={webInputRef as any}
+                type="file"
+                accept={WEB_ACCEPT}
+                style={{ opacity: 0, position: "absolute", inset: 0, cursor: "pointer" }}
+                onChange={(e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  (e.target as HTMLInputElement).value = "";
+                  if (file) onPickWeb(file);
+                }}
               />
+              <Text style={{ color: "#2563EB", fontWeight: "600" }}>+ Agregar</Text>
             </View>
-
-            {/* Comentarios */}
-            <View style={{ marginTop: 8 }}>
-              <TaskComments
-                boardId={t.boardId}
-                taskId={t.id}
-                meId={meId}
-                comments={getComments(t.id)}
-                onRefetch={() => onRefetchComments(t)}
-              />
-            </View>
-          </View>
-        );
-      })}
-      <View style={{ height: 60 }} />
-    </ScrollView>
-  );
-}
-
-/* ======================= Subcomponentes ======================= */
-
-function ColumnHeader({
-  title,
-  color,
-  bg,
-}: {
-  title: string;
-  color: string;
-  bg: string;
-}) {
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <Text style={{ fontWeight: "800" }}>{title}</Text>
-      <View
-        style={{
-          paddingHorizontal: 10,
-          paddingVertical: 4,
-          borderRadius: 999,
-          backgroundColor: bg,
-        }}
-      >
-        <Text style={{ color, fontWeight: "800", fontSize: 12 }}>{title}</Text>
-      </View>
-    </View>
-  );
-}
-
-function TaskCard({
-  t,
-  displayAssignee,
-  fmt,
-  attachments,
-  onAttachmentAdded,
-  onRefetch,
-  comments,
-  onRefetchComments,
-  meId,
-}: {
-  t: Task;
-  displayAssignee: (id?: string) => string;
-  fmt: (iso?: string) => string;
-  attachments: Attachment[];
-  onAttachmentAdded: (att: Attachment) => void;
-  onRefetch: () => Promise<void>;
-  comments: CommentDto[];
-  onRefetchComments: () => Promise<void>;
-  meId: string;
-}) {
-  const isOverdue =
-    t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "DONE";
-  return (
-    <View>
-      <Text style={{ fontWeight: "700" }}>{t.title}</Text>
-      <Text style={{ color: "#64748B" }}>
-        Responsable: {displayAssignee(t.assigneeId)}
-      </Text>
-      <Text style={{ color: isOverdue ? "#B42318" : "#64748B" }}>
-        Vence: {fmt(t.dueDate)} {isOverdue ? "⏰" : ""}
-      </Text>
-
-      <View style={{ marginTop: 8 }}>
-        <TaskAttachments
-          task={t}
-          attachments={attachments}
-          onAttachmentAdded={onAttachmentAdded}
-          onRefetch={onRefetch}
-        />
+          ) : (
+            <Pressable
+              onPress={pickAndUploadNative}
+              style={{
+                width: TILE_W,
+                height: TILE_H,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                justifyContent: "center",
+                alignItems: "center",
+                backgroundColor: "#fff",
+              }}
+            >
+              <Text style={{ color: "#2563EB", fontWeight: "600" }}>+ Agregar</Text>
+            </Pressable>
+          )}
+        </ScrollView>
       </View>
 
-      <View style={{ marginTop: 8 }}>
-        <TaskComments
-          boardId={t.boardId}
-          taskId={t.id}
-          meId={meId}
-          comments={comments}
-          onRefetch={onRefetchComments}
-        />
-      </View>
+      {/* Botón Descargar */}
+      {preview && (
+        <Pressable
+          onPress={() => downloadToDevice(preview.url, safeDownloadName(preview), preview.contentType)}
+          style={{
+            marginTop: 6,
+            backgroundColor: "#111827",
+            borderRadius: 8,
+            paddingVertical: 6,
+            paddingHorizontal: 12,
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600", textAlign: "center" }}>Descargar</Text>
+        </Pressable>
+      )}
+
+{modalVisible && preview ? (
+  <AttachmentPreviewModal
+    visible={true}
+    onClose={() => setModalVisible(false)}
+    attachment={preview}
+  />
+) : null}
     </View>
   );
 }
 
 /* ======================= Comentarios ======================= */
-
-function TaskComments({
-  boardId,
-  taskId,
-  meId,
-  comments,
-  onRefetch,
-}: {
-  boardId: string;
-  taskId: string;
-  meId: string;
-  comments: CommentDto[];
-  onRefetch: () => Promise<void>;
-}) {
+function CommentList({ boardId, taskId, comments, refetchComments }: any) {
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    onRefetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardId, taskId]);
 
   const send = async () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setSending(true);
-    try {
-      await postComment(boardId, taskId, meId, trimmed);
-      setText("");
-      await onRefetch();
-    } catch (e: any) {
-      alert("Error comentando: " + (e?.message ?? String(e)));
-    } finally {
-      setSending(false);
-    }
+    if (!text.trim()) return;
+    await postComment(boardId, taskId, "me", text.trim());
+    setText("");
+    await refetchComments(boardId, taskId);
   };
 
   return (
-    <View style={{ gap: 8 }}>
-      {/* input */}
-      {Platform.OS === "web" ? (
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            placeholder="Escribe un comentario…"
-            value={text}
-            onChange={(e) => setText(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") send();
-            }}
-            style={{
-              flex: 1,
-              border: "1px solid #E5E7EB",
-              borderRadius: 8,
-              padding: 10,
-            }}
-          />
-          <button
-            disabled={sending || !text.trim()}
-            onClick={send}
-            style={{
-              borderRadius: 999,
-              padding: "10px 14px",
-              background: "#2563EB",
-              color: "#fff",
-              fontWeight: 800,
-            }}
-          >
-            ENVIAR
-          </button>
-        </div>
-      ) : (
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TextInput
-            placeholder="Escribe un comentario…"
-            value={text}
-            onChangeText={setText}
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: "#E5E7EB",
-              borderRadius: 8,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-            }}
-          />
-          <PillButton
-            label={sending ? "..." : "Enviar"}
-            onPress={send}
-            disabled={sending || !text.trim()}
-          />
-        </View>
-      )}
+    <View style={{ marginTop: 10 }}>
+      <Text style={{ fontSize: 13, fontWeight: "600", marginBottom: 4 }}>Comentarios</Text>
+      <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled>
+        {comments.map((c: CommentDto) => (
+          <View key={c.id} style={{ marginBottom: 4 }}>
+            <Text style={{ fontSize: 12, color: "#374151" }}>{c.text}</Text>
+            <Text style={{ fontSize: 10, color: "#9CA3AF" }}>{new Date(c.createdAt).toLocaleString()}</Text>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
+        <TextInput
+          placeholder="Escribir comentario..."
+          value={text}
+          onChangeText={setText}
+          style={{ flex: 1, borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, paddingHorizontal: 8, height: 36 }}
+        />
+        <Pressable
+          onPress={send}
+          style={{ marginLeft: 6, backgroundColor: "#2563EB", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Enviar</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
-      {/* lista */}
-      {comments?.length ? (
-        <View style={{ gap: 6 }}>
-          {comments.map((c) => (
+/* ======================= Filtro de estado ======================= */
+function StatusFilter({
+  value,
+  onChange,
+  isMobile,
+}: {
+  value: "" | TaskStatus;
+  onChange: (v: "" | TaskStatus) => void;
+  isMobile: boolean;
+}) {
+  if (Platform.OS === "web") {
+    return (
+      <select
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value as any)}
+        style={{
+          padding: 10,
+          borderRadius: 10,
+          border: "1px solid #E5E7EB" as any,
+          minWidth: 200,
+          background: "#fff",
+        }}
+      >
+        <option value="">Todos los estados</option>
+        {ALL_STATUS.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (Platform.OS === "ios") {
+    const label = value || "Todos los estados";
+    return (
+      <Pressable
+        onPress={() =>
+          ActionSheetIOS.showActionSheetWithOptions(
+            {
+              title: "Filtrar por estado",
+              options: ["Todos", ...ALL_STATUS, "Cancelar"],
+              cancelButtonIndex: ALL_STATUS.length + 1,
+            },
+            (idx) => {
+              if (idx === ALL_STATUS.length + 1) return;
+              if (idx === 0) onChange("");
+              else onChange(ALL_STATUS[idx - 1]);
+            }
+          )
+        }
+        style={{
+          height: 44,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
+          justifyContent: "center",
+          backgroundColor: "#fff",
+          minWidth: isMobile ? 180 : 220,
+        }}
+      >
+        <Text style={{ color: "#111827", fontWeight: "600" }}>{label}</Text>
+      </Pressable>
+    );
+  }
+
+  // Android
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderRadius: 10,
+        borderColor: "#E5E7EB",
+        height: 44,
+        minWidth: isMobile ? 180 : 220,
+        justifyContent: "center",
+        backgroundColor: "#FFFFFF",
+      }}
+    >
+      <Picker
+        selectedValue={value}
+        onValueChange={(v) => onChange(v as any)}
+        mode={isMobile ? "dialog" : "dropdown"}
+        style={{ height: "100%", width: "100%" }}
+        dropdownIconColor="#374151"
+        prompt="Filtrar por estado"
+      >
+        <Picker.Item label="Todos los estados" value="" />
+        {ALL_STATUS.map((s) => (
+          <Picker.Item key={s} label={s} value={s} />
+        ))}
+      </Picker>
+    </View>
+  );
+}
+
+/* ======================= VideoPreview (solo para modal) ======================= */
+// Modal: igual, nunca condicional; replace() cuando listo
+function VideoPreview({ uri, visible }: { uri: string; visible: boolean }) {
+  const [localUri, setLocalUri] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const token = useApp.getState().token || "";
+        const dest = `${FileSystem.cacheDirectory}play-${Date.now()}.mp4`;
+        const res = await FileSystem.downloadAsync(uri, dest, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (alive) setLocalUri(res.uri);
+      } catch {
+        if (alive) setLocalUri(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [uri]);
+
+  const player = useVideoPlayer(undefined as any, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  React.useEffect(() => {
+    if (localUri) player.replace({ uri: localUri });
+  }, [localUri, player]);
+
+  React.useEffect(() => {
+    if (!localUri) return;
+    visible ? player.play() : player.pause();
+  }, [visible, localUri, player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={{ width: "90%", height: "70%", borderRadius: 12, backgroundColor: "#000" }}
+      contentFit="contain"
+      nativeControls
+    />
+  );
+}
+
+async function downloadToDevice(url: string, filename: string, contentType?: string) {
+  // Web: descarga via <a>
+  if (Platform.OS === "web") {
+    try {
+      const headers: Record<string, string> = { "ngrok-skip-browser-warning": "true" };
+      const token = useApp.getState().token;
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(url, { headers, credentials: "omit" });
+      if (!res.ok) throw new Error(`GET ${res.status}`);
+      const ct = res.headers.get("content-type") || "application/octet-stream";
+      const blob = new Blob([await res.arrayBuffer()], { type: ct });
+
+      const obj = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = obj;
+      a.download = filename || "archivo";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(obj);
+    } catch (e: any) {
+      alert("No se pudo descargar en web: " + (e?.message ?? String(e)));
+    }
+    return;
+  }
+
+  // Nativo (iOS/Android)
+  try {
+    const safeName = filename || "archivo";
+    const dest = `${FileSystem.cacheDirectory}${safeName}`;
+
+    // Descarga al caché del dispositivo
+    const res = await FileSystem.downloadAsync(url, dest);
+
+    // Si es imagen o video intenta guardarlo directo en galería
+    if (contentType?.startsWith("image/") || contentType?.startsWith("video/")) {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      if (perm.status === "granted") {
+        await MediaLibrary.saveToLibraryAsync(res.uri);
+        alert("✅ Guardado en la galería.");
+        return;
+      }
+    }
+
+    // Si no, compartir/abrir con app nativa
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(res.uri, { dialogTitle: "Guardar/Compartir archivo" });
+    } else {
+      alert(`Descargado en: ${res.uri}`);
+    }
+  } catch (e: any) {
+    alert("No se pudo descargar el archivo: " + (e?.message ?? String(e)));
+  }
+}
+
+function Kanban({
+  byStatus,
+  statusStyle,
+  attachmentsByTask,
+  commentsByTask,
+  refetchTaskAttachments,
+  addAttachment,
+  refetchComments,
+  displayAssignee,
+  fmt,
+  cardShadow,
+  updateStatus,
+}: any) {
+  const { width: vw, height: vh } = useWindowDimensions();
+  const COLS = Object.keys(byStatus).length;   // 3
+  const GAP = 14;
+  const OUTER = vw < 768 ? 12 : 20;
+
+  // alto con scroll interno por columna
+  const headerReserve = 56 + 12 + 8;
+  const colHeight = Math.max(420, vh - headerReserve - 24);
+
+  const available = vw - OUTER * 2 - GAP * (COLS - 1);
+  const MIN = 260;                              // ancho mínimo que mantiene legibilidad
+
+  const ideal = Math.floor(available / COLS);
+
+  // ¿Caben sin scroll?
+  const fitMode = ideal >= MIN;
+
+  // En fitMode llenamos 100% (sin límite superior); en scrollMode fijamos MIN
+  const colW = fitMode ? ideal : MIN;
+
+  // En fitMode usamos minWidth = vw para ocupar todo;
+  // en scrollMode, forzamos el ancho total de las columnas para que aparezca scroll
+  const rackMinWidth = fitMode ? vw : (colW * COLS + GAP * (COLS - 1) + OUTER * 2);
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator
+      nestedScrollEnabled
+      style={{ flex: 1, backgroundColor: "#fff" }}
+      contentContainerStyle={{
+        paddingHorizontal: OUTER,
+        paddingVertical: 12,
+        minWidth: rackMinWidth,                 // 👈 ocupa 100% o fuerza scroll
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          gap: GAP,
+          alignItems: "stretch",
+          // reparte columnas para que llenen 100% en fitMode (evita hueco)
+          justifyContent: fitMode ? "space-between" : "flex-start",
+          width: "100%",
+        }}
+      >
+        {Object.entries(byStatus).map(([st, list]: [string, any[]]) => {
+          const style = statusStyle[st as keyof typeof statusStyle];
+          return (
             <View
-              key={c.id}
+              key={st}
               style={{
-                paddingVertical: 6,
-                borderBottomWidth: 1,
-                borderBottomColor: "#F1F5F9",
+                width: colW,                    // 👈 ancho calculado
+                flexShrink: 0,
+                backgroundColor: "#FFFFFF",
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                padding: 10,
+                minHeight: colHeight,
               }}
             >
-              <Text style={{ fontWeight: "700" }}>{c.authorId}</Text>
-              <Text style={{ color: "#334155" }}>{c.text}</Text>
-              <Text style={{ color: "#94A3B8", fontSize: 12 }}>
-                {new Date(c.createdAt).toLocaleString()}
+              <Text style={{ fontWeight: "700", fontSize: 16, color: style.fg, marginBottom: 8 }}>
+                {style.title}
               </Text>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 60, gap: 8 }}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+              >
+                {list.map((t: any) => (
+                  <View
+                    key={t.id}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#E5E7EB",
+                      borderRadius: 10,
+                      backgroundColor: "#fff",
+                      padding: 8,
+                      ...cardShadow,
+                    }}
+                  >
+                    <Text style={{ fontWeight: "600", fontSize: 15 }}>{t.title}</Text>
+                    <Text style={{ fontSize: 12, color: "#6B7280" }}>{displayAssignee(t.assigneeId)}</Text>
+                    <Text style={{ fontSize: 12, color: "#9CA3AF" }}>{fmt(t.dueDate)}</Text>
+
+                    <TaskAttachments
+                      boardId={t.boardId}
+                      taskId={t.id}
+                      attachments={attachmentsByTask[t.id] ?? []}
+                      refetchTaskAttachments={refetchTaskAttachments}
+                      addAttachment={addAttachment}
+                    />
+
+                    <CommentList
+                      boardId={t.boardId}
+                      taskId={t.id}
+                      comments={commentsByTask[t.id] ?? []}
+                      refetchComments={refetchComments}
+                    />
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap" as const, gap: 8, marginTop: 6 }}>
+                      {(["OPEN", "IN_PROGRESS", "DONE"] as const)
+                        .filter((s) => s !== t.status)
+                        .map((s) => (
+                          <Pressable
+                            key={s}
+                            onPress={() => updateStatus(t.id, s)}
+                            style={{
+                              backgroundColor: statusStyle[s].bg,
+                              borderRadius: 6,
+                              paddingVertical: 4,
+                              paddingHorizontal: 8,
+                            }}
+                          >
+                            <Text style={{ color: statusStyle[s].fg, fontSize: 11 }}>{s}</Text>
+                          </Pressable>
+                        ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
             </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
-/* ======================= Adjuntos ======================= */
-
-function TaskAttachments({
-  task: t,
-  attachments,
-  onAttachmentAdded,
-  onRefetch,
+function TopBar({
+  email,
+  onMenu,
+  onLogout,
 }: {
-  task: Task;
-  attachments: Attachment[];
-  onAttachmentAdded: (att: Attachment) => void;
-  onRefetch?: () => Promise<void>;
+  email?: string;
+  onMenu: () => void;
+  onLogout: () => void;
 }) {
-  // Releer adjuntos al montar/cambiar de tarea
-  useEffect(() => {
-    onRefetch?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.boardId, t.id]);
-
   return (
-    <View>
-      {/* Botones Adjuntar (Web + Nativo) */}
-      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
-        {Platform.OS === "web" ? (
-          <label>
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={async (e) => {
-                const input = e.currentTarget as HTMLInputElement | null;
-                const file = input?.files?.[0] ?? null;
-                if (input) input.value = "";
-                if (!file) return;
-
-                try {
-                  const contentType =
-                    file.type || guessMimeFromName(file.name) || "image/jpeg";
-                  const size = file.size ?? 0;
-
-                  const { key, uploadUrl } = await presignAttachment(
-                    t.boardId,
-                    t.id,
-                    contentType,
-                    size
-                  );
-
-                  const put = await fetch(uploadUrl, {
-                    method: "PUT",
-                    headers: { "Content-Type": contentType },
-                    body: file,
-                  });
-                  if (!put.ok) throw new Error(`Upload failed: ${put.status}`);
-
-                  const saved = await completeAttachment(
-                    t.boardId,
-                    t.id,
-                    key,
-                    contentType,
-                    size
-                  );
-                  onAttachmentAdded(saved); // optimista
-                  await onRefetch?.(); // sincroniza con backend
-                  alert("✅ Adjuntado");
-                } catch (err: any) {
-                  alert("Error subiendo: " + (err?.message ?? String(err)));
-                }
-              }}
-            />
-            <PillButton label="Adjuntar" onPress={() => {}} />
-          </label>
-        ) : (
-          <PillButton
-            label="Adjuntar"
-            onPress={async () => {
-              try {
-                const res = await ImagePicker.launchImageLibraryAsync({
-                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsEditing: false,
-                  quality: 0.9,
-                });
-                if (res.canceled || !res.assets?.[0]) return;
-
-                const asset: ImagePickerAsset = res.assets[0];
-                const uri = asset.uri; // file://...
-
-                const nameFromUri = uri.split("/").pop();
-                const safeName = asset.fileName ?? nameFromUri ?? "image.jpg";
-                let contentType = asset.mimeType ?? guessMimeFromName(safeName);
-                let size = asset.fileSize ?? 0;
-                if (!size) {
-                  try {
-                    const info = await FileSystem.getInfoAsync(uri);
-                    if (info.exists && typeof info.size === "number")
-                      size = info.size;
-                  } catch {}
-                }
-
-                // 1) presign
-                const { key, uploadUrl } = await presignAttachment(
-                  t.boardId,
-                  t.id,
-                  contentType,
-                  size
-                );
-
-                // 2) PUT (fetch sobre file:// en Expo)
-                const fileResp = await fetch(uri);
-                const blob = await fileResp.blob();
-                const resUp = await fetch(uploadUrl, {
-                  method: "PUT",
-                  headers: { "Content-Type": contentType },
-                  body: blob,
-                });
-                if (!resUp.ok) throw new Error(`Upload failed: ${resUp.status}`);
-
-                // 3) complete
-                const saved = await completeAttachment(
-                  t.boardId,
-                  t.id,
-                  key,
-                  contentType,
-                  size
-                );
-                onAttachmentAdded(saved);
-                await onRefetch?.();
-
-                alert("✅ Adjuntado");
-              } catch (e: any) {
-                alert("Error: " + (e?.message ?? String(e)));
-              }
-            }}
-          />
-        )}
+    <View
+      style={{
+        height: 56,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 16,
+        backgroundColor: "#F9FAFB",
+        borderBottomWidth: 1,
+        borderColor: "#E5E7EB",
+        // 👇 que no desaparezca ni quede debajo del scroll en web
+        ...(Platform.OS === "web" ? { position: "sticky", top: 0, zIndex: 100 } : {}),
+      }}
+    >
+      {/* IZQ: título */}
+      <View style={{ minWidth: 0 }}>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>Condos</Text>
       </View>
 
-      {/* Thumbnails */}
-      {attachments?.length ? (
-        <ScrollView horizontal style={{ gap: 8 }}>
-          {attachments.map((att) => (
-            <View key={att.id ?? att.key} style={{ marginRight: 8 }}>
-              {att.contentType.startsWith("image/") ? (
-                Platform.OS === "web" ? (
-                  // @ts-ignore
-                  <img
-                    src={att.url}
-                    alt="adjunto"
-                    style={{
-                      width: 120,
-                      height: 80,
-                      objectFit: "cover",
-                      borderRadius: 8,
-                    }}
-                  />
-                ) : (
-                  <Image
-                    source={{ uri: att.url }}
-                    style={{ width: 120, height: 80, borderRadius: 8 }}
-                  />
-                )
-              ) : (
-                <Text style={{ maxWidth: 200 }} numberOfLines={1}>
-                  {att.key}
-                </Text>
-              )}
-            </View>
-          ))}
-        </ScrollView>
-      ) : null}
+      {/* FLEX spacer */}
+      <View style={{ flex: 1 }} />
+
+      {/* DER: chips + botones */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        {!!email && (
+          <View
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              backgroundColor: "#EEF2FF",
+              borderRadius: 999,
+            }}
+          >
+            <Text style={{ fontWeight: "700", color: "#1F2937" }}>{email}</Text>
+          </View>
+        )}
+
+        <Pressable
+          onPress={onMenu}
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            backgroundColor: "#E5EAF2",
+            borderRadius: 999,
+          }}
+        >
+          <Text style={{ fontWeight: "800", color: "#0F172A" }}>MENÚ PRINCIPAL</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onLogout}
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 999,
+            backgroundColor: "#ef4444",
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "800" }}>SALIR</Text>
+        </Pressable>
+      </View>
     </View>
-  );
-}
-
-/* ======================= Botón ======================= */
-
-function PillButton({
-  label,
-  onPress,
-  disabled,
-  tone = "primary",
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  tone?: "primary" | "secondary" | "warning" | "danger";
-}) {
-  const palette = {
-    primary: { bg: "#2563EB", bg2: "#1D4ED8", fg: "#fff" },
-    secondary: { bg: "#F1F5F9", bg2: "#E2E8F0", fg: "#0F172A" },
-    warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#fff" },
-    danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#fff" },
-  } as const;
-  const p = palette[tone];
-
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 999,
-        backgroundColor: disabled ? "#CBD5E1" : pressed ? p.bg2 : p.bg,
-        opacity: disabled ? 0.7 : 1,
-      })}
-    >
-      <Text style={{ color: p.fg, fontWeight: "800" }}>
-        {label.toUpperCase()}
-      </Text>
-    </Pressable>
   );
 }

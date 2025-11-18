@@ -3,6 +3,7 @@ import { Picker } from "@react-native-picker/picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   FlatList,
   Platform,
@@ -10,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { apiAuth } from "../../lib/api";
 import { useApp } from "../../lib/store";
@@ -33,6 +35,9 @@ type UserOpt = { id: string; label: string };
 export default function BoardTasks() {
   const router = useRouter();
   const { me, token, logout } = useApp();
+  const { width } = useWindowDimensions();
+  const twoCols = width >= 820; // tablet/web: 2 columnas
+
   const { boardId, orgId: orgIdParam, boardName } =
     useLocalSearchParams<{ boardId: string; orgId: string; boardName?: string }>();
 
@@ -42,13 +47,13 @@ export default function BoardTasks() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Crear
+  // Crear (form oculto hasta presionar el botón)
+  const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string>("");
-  const [dueDate, setDueDate] = useState<string>(""); // "2025-10-03"
+  const [dueDate, setDueDate] = useState<string>("");
 
-  // Mapa para mostrar nombre del asignado en la lista
   const userNameById = useMemo(
     () => Object.fromEntries(users.map((u) => [u.id, u.label])),
     [users]
@@ -130,9 +135,11 @@ export default function BoardTasks() {
       });
       setTitle("");
       setDescription("");
+      setAssigneeId(assigneeId);
       setDueDate("");
       await loadTasks();
       setMsg("Tarea creada ✅");
+      setShowCreate(false);
     } catch (e: any) {
       setMsg(e.message ?? String(e));
     }
@@ -156,6 +163,104 @@ export default function BoardTasks() {
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "web" ? 10 : 12,
   } as const;
+
+/* ============ Selector de Asignado ============ */
+const AssigneeSelector = () => {
+  // 1) WEB: <select>
+  if (Platform.OS === "web") {
+    return (
+      <select
+        value={assigneeId}
+        onChange={(e) => setAssigneeId(e.currentTarget.value)}
+        style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any, minWidth: 220 }}
+      >
+        <option value="">— sin asignar —</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  // 2) ANDROID: Picker en modo dropdown (no ocupa espacio al abrir)
+  if (Platform.OS === "android") {
+    return (
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
+          borderRadius: 10,
+          minHeight: 44,
+          justifyContent: "center",
+          backgroundColor: "#fff",
+          elevation: 2,
+        }}
+      >
+        <Picker
+          selectedValue={assigneeId}
+          onValueChange={(v) => setAssigneeId(String(v))}
+          mode="dropdown"
+          style={{ height: 44 }}
+          itemStyle={{ fontSize: 14 }}
+        >
+          <Picker.Item label="— sin asignar —" value="" />
+          {users.map((u) => (
+            <Picker.Item key={u.id} label={u.label} value={u.id} />
+          ))}
+        </Picker>
+      </View>
+    );
+  }
+
+  // 3) iOS/iPad: ActionSheet (no rompe el layout)
+  const options = ["— sin asignar —", ...users.map((u) => u.label), "Cancelar"];
+  const cancelButtonIndex = options.length - 1;
+
+  const currentLabel =
+    assigneeId ? users.find((u) => u.id === assigneeId)?.label ?? assigneeId : "— sin asignar —";
+
+  const openSheet = () => {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: "Asignar a…",
+        options,
+        cancelButtonIndex,
+        userInterfaceStyle: "light",
+      },
+      (idx) => {
+        if (idx === cancelButtonIndex) return;
+        if (idx === 0) {
+          setAssigneeId("");
+        } else {
+          const selectedUser = users[idx - 1];
+          if (selectedUser) setAssigneeId(selectedUser.id);
+        }
+      }
+    );
+  };
+
+  return (
+    <Pressable
+      onPress={openSheet}
+      style={({ pressed }) => ({
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        borderRadius: 10,
+        minHeight: 44,
+        backgroundColor: pressed ? "#F8FAFC" : "#fff",
+        justifyContent: "center",
+        paddingHorizontal: 12,
+      })}
+    >
+      <Text style={{ fontWeight: "700", color: "#111827" }} numberOfLines={1}>
+        {currentLabel}
+      </Text>
+      <Text style={{ position: "absolute", right: 12, color: "#94A3B8" }}>▼</Text>
+    </Pressable>
+  );
+};
 
   /* ------------------------ Render ------------------------ */
   return (
@@ -192,7 +297,7 @@ export default function BoardTasks() {
               {me.email}
             </Text>
           )}
-          <PillButton label="Salir" tone="danger" onPress={logout} />
+          <PillButton label="SALIR" tone="danger" onPress={logout} />
         </View>
       </View>
 
@@ -214,7 +319,7 @@ export default function BoardTasks() {
         <Text style={{ fontSize: 18, fontWeight: "800" }}>
           Tareas · {boardName || boardId}
         </Text>
-        <PillButton label="Volver" onPress={() => router.back()} />
+        <PillButton label="VOLVER" onPress={() => router.back()} />
       </View>
 
       {/* --- SCROLL PRINCIPAL --- */}
@@ -226,6 +331,8 @@ export default function BoardTasks() {
         keyExtractor={(t) => t.id}
         refreshing={loading}
         onRefresh={loadTasks}
+        numColumns={twoCols ? 2 : 1}
+        columnWrapperStyle={twoCols ? { gap: 16 } : undefined}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
             {!!msg && (
@@ -242,67 +349,52 @@ export default function BoardTasks() {
               </View>
             )}
 
-            {/* Crear tarea */}
-            <View style={{ ...card, gap: 8 }}>
-              <Text style={{ fontWeight: "800" }}>Crear tarea</Text>
+            {/* Toggle crear tarea */}
+            <View style={{ ...card, gap: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ fontWeight: "800" }}>Nueva tarea</Text>
+                <View style={{ marginLeft: "auto" }}>
+                  <PillButton
+                    label={showCreate ? "OCULTAR" : "CREAR TAREA"}
+                    tone={showCreate ? "secondary" : "primary"}
+                    onPress={() => setShowCreate((v) => !v)}
+                  />
+                </View>
+              </View>
 
-              <TextInput
-                placeholder="Título"
-                value={title}
-                onChangeText={setTitle}
-                style={input}
-              />
-
-              <TextInput
-                placeholder="Descripción (opcional)"
-                value={description}
-                onChangeText={setDescription}
-                style={input}
-              />
-
-              {/* Selector de asignado */}
-              {Platform.OS === "web" ? (
-                <select
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.currentTarget.value)}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
-                >
-                  <option value="">— sin asignar —</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <View style={{ borderWidth: 1, borderRadius: 10, borderColor: "#E5E7EB" }}>
-                  <Picker selectedValue={assigneeId} onValueChange={(v) => setAssigneeId(String(v))}>
-                    <Picker.Item label="— sin asignar —" value="" />
-                    {users.map((u) => (
-                      <Picker.Item key={u.id} label={u.label} value={u.id} />
-                    ))}
-                  </Picker>
+              {showCreate && (
+                <View style={{ gap: 8 }}>
+                  <TextInput
+                    placeholder="Título"
+                    value={title}
+                    onChangeText={setTitle}
+                    style={input}
+                  />
+                  <TextInput
+                    placeholder="Descripción (opcional)"
+                    value={description}
+                    onChangeText={setDescription}
+                    style={input}
+                  />
+                  <AssigneeSelector />
+                  {Platform.OS === "web" ? (
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.currentTarget.value)}
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
+                    />
+                  ) : (
+                    <TextInput
+                      placeholder="yyyy-MM-dd"
+                      value={dueDate}
+                      onChangeText={setDueDate}
+                      style={input}
+                    />
+                  )}
+                  <PillButton label="CREAR" onPress={createTask} disabled={!title.trim()} />
                 </View>
               )}
-
-              {/* Fecha límite (yyyy-MM-dd) */}
-              {Platform.OS === "web" ? (
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.currentTarget.value)}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
-                />
-              ) : (
-                <TextInput
-                  placeholder="yyyy-MM-dd"
-                  value={dueDate}
-                  onChangeText={setDueDate}
-                  style={input}
-                />
-              )}
-
-              <PillButton label="Crear" onPress={createTask} disabled={!title.trim()} />
             </View>
 
             {/* Encabezado listado */}
@@ -330,6 +422,8 @@ export default function BoardTasks() {
               ...(Platform.OS === "web"
                 ? { boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 1px 2px rgba(16,24,40,.06)" }
                 : {}),
+              flexBasis: twoCols ? "48%" : "100%",
+              maxWidth: twoCols ? "48%" : "100%",
             }}
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -351,8 +445,6 @@ export default function BoardTasks() {
                 />
               )}
             </View>
-
-            {/* Acciones futuras (editar/estado) podrían ir aquí con PillButton */}
           </View>
         )}
         ListFooterComponent={<View style={{ height: 24 }} />}
