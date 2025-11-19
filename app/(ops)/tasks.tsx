@@ -1004,9 +1004,9 @@ async function downloadToDevice(url: string, filename: string, contentType?: str
   // Web: descarga via <a>
   if (Platform.OS === "web") {
     try {
-      const headers: Record<string, string> = { "ngrok-skip-browser-warning": "true" };
-      const token = useApp.getState().token;
-      if (token) headers.Authorization = `Bearer ${token}`;
+const headers: Record<string, string> = {};
+const token = useApp.getState().token;
+if (token) headers.Authorization = `Bearer ${token}`;
 
       const res = await fetch(url, { headers, credentials: "omit" });
       if (!res.ok) throw new Error(`GET ${res.status}`);

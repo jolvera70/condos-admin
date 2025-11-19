@@ -12,8 +12,11 @@ export function useBlobUrlWithAuth(url?: string) {
     let revoke: string | undefined;
     (async () => {
       try {
-        const headers: Record<string, string> = { "ngrok-skip-browser-warning": "true" };
-        if (token) headers.Authorization = `Bearer ${token}`;
+const headers: Record<string, string> = {};
+const token = useApp.getState().token;
+if (token) headers.Authorization = `Bearer ${token}`;
+
+// solo si la URL realmente es de ngrok
 
         const res = await fetch(url, { headers, credentials: "omit" });
         console.log("[media] fetch", { url, status: res.status, ct: res.headers.get("content-type") });
