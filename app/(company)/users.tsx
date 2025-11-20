@@ -54,16 +54,19 @@ function Select<T extends string>({
   onChange,
   minWidth = 160,
   testID,
+  disabled = false,
 }: {
   value: T;
   options: Option<T>[];
   onChange: (v: T) => void;
   minWidth?: number;
   testID?: string;
+  disabled?: boolean;
 }) {
   if (Platform.OS === "web") {
     return (
       <select
+      disabled={disabled}
         data-testid={testID}
         value={value}
         onChange={(e) => onChange(e.currentTarget.value as T)}
@@ -72,7 +75,9 @@ function Select<T extends string>({
           padding: 10,
           borderRadius: 12,
           border: "1px solid #E5E7EB" as any,
-          background: "#fff",
+          background: disabled ? "#F1F5F9" : "#fff",
+          color: disabled ? "#9CA3AF" : "#000",
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
       >
         {options.map((o) => (
@@ -88,6 +93,7 @@ function Select<T extends string>({
     const current = options.find((o) => o.value === value)?.label ?? String(value);
     return (
       <Pressable
+      disabled={disabled}
         onPress={() => {
           ActionSheetIOS.showActionSheetWithOptions(
             {
@@ -109,7 +115,8 @@ function Select<T extends string>({
           borderRadius: 999,
           paddingVertical: 10,
           paddingHorizontal: 14,
-          backgroundColor: "#fff",
+          backgroundColor: disabled ? "#F1F5F9" : "#fff",
+          opacity: disabled ? 0.6 : 1,
         }}
       >
         <Text style={{ fontWeight: "600", color: "#111827" }}>{current}</Text>
@@ -126,12 +133,14 @@ function Select<T extends string>({
         borderColor: "#E5E7EB",
         borderRadius: 12,
         overflow: "hidden",
-        backgroundColor: "#fff",
+        backgroundColor: disabled ? "#F1F5F9" : "#fff",
         height: 44,
         justifyContent: "center",
+        opacity: disabled ? 0.6 : 1,
       }}
     >
       <Picker
+      enabled={!disabled}
         selectedValue={value}
         onValueChange={(v) => onChange(v as T)}
         mode="dropdown"
@@ -317,6 +326,8 @@ export default function UsersCompany() {
     () => allowedRoleOptionsFor(me, orgId),
     [me, orgId]
   );
+  const canManageUsers =
+  myRoleInOrg === "SUPERADMIN" || myRoleInOrg === "ADMINISTRADOR";
   const roleForOrg = (u: UserItem, org: string): Role => {
     const found = u.orgs?.find((o) => o.orgId === org)?.role;
     const r = (Array.isArray(u.roles) && u.roles.length ? u.roles[0] : found) as string | undefined;
@@ -378,19 +389,44 @@ export default function UsersCompany() {
     setEditingId(null);
     setEditForm({ fullName: "", email: "", password: "" });
   };
-  const saveEdit = async () => {
-    if (!editingId) return;
-    try {
-      const payload: any = { fullName: editForm.fullName, email: editForm.email.trim().toLowerCase() };
-      if (editForm.password && editForm.password.length >= 3) payload.password = editForm.password;
-      await apiAuth(`/user/users/${editingId}`, "PUT", payload);
-      await loadUsers();
-      cancelEdit();
-      setMsg("Usuario actualizado ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
+const saveEdit = async () => {
+  if (!editingId) return;
+  try {
+    const oldUser = users.find((u) => u.id === editingId);
+    const oldEmail = (oldUser?.email ?? "").toLowerCase();
+
+    const newFullName = editForm.fullName.trim();
+    const newEmail = editForm.email.trim().toLowerCase();
+    const newPassword = editForm.password?.trim();
+
+    // 1) Actualizar perfil en user-api (nombre + email)
+    await apiAuth(`/user/users/${editingId}`, "PUT", {
+      fullName: newFullName,
+      email: newEmail,
+    });
+
+    // 2) Si cambió el email, actualizar también en auth-api
+    if (newEmail && newEmail !== oldEmail) {
+      await apiAuth(`/auth/users/${editingId}/email`, "PATCH", {
+        newEmail,
+      });
     }
-  };
+
+    // 3) Si vino password nuevo, actualizar en auth-api
+    if (newPassword && newPassword.length >= 3) {
+      await apiAuth(`/auth/users/${editingId}/password`, "PATCH", {
+        newPassword,
+      });
+    }
+
+    await loadUsers();
+    cancelEdit();
+    setMsg("Usuario actualizado ✅");
+  } catch (e: any) {
+    setMsg(e.message ?? String(e));
+  }
+};
+
 
   /* ------- cambios rol/estado ------- */
   const changeStatus = async (u: UserItem, newStatus: Status) => {
@@ -518,11 +554,13 @@ export default function UsersCompany() {
                 minWidth={200}
                 testID="org-select"
               />
+              {canManageUsers && (
               <PillButton
                 label={showCreate ? "OCULTAR" : "CREAR USUARIO"}
                 tone={showCreate ? "secondary" : "primary"}
                 onPress={() => setShowCreate((v) => !v)}
               />
+              )}
               <PillButton label="Menú principal" onPress={() => router.replace("/(app)/home")} />
             </View>
           </View>
@@ -635,6 +673,7 @@ export default function UsersCompany() {
                           onChange={(v) => changeRole(u, v as Role)}
                           options={allowedRoleOptionsFor(me, orgId).map((r) => ({ label: r, value: r }))}
                           minWidth={200}
+                          disabled={!canManageUsers} 
                         />
                       </View>
 
@@ -647,13 +686,16 @@ export default function UsersCompany() {
                             onChange={(v) => changeStatus(u, v as Status)}
                             options={STATUS_OPTS.map((s) => ({ label: s, value: s }))}
                             minWidth={200}
+                            disabled={!canManageUsers} 
                           />
                         </View>
                       )}
 
-                      <View style={{ flexDirection: "row", gap: 8 }}>
-                        <PillButton label="Editar" tone="secondary" onPress={() => startEdit(u)} />
-                      </View>
+{canManageUsers && (
+  <View style={{ flexDirection: "row", gap: 8 }}>
+    <PillButton label="Editar" tone="secondary" onPress={() => startEdit(u)} />
+  </View>
+)}
                     </>
                   ) : (
                     <>

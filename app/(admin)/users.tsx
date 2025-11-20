@@ -260,24 +260,43 @@ export default function Users() {
     setEditForm({ fullName: "", email: "", password: "" });
   };
 
-  const saveEdit = async () => {
-    if (!editingId) return;
-    try {
-      const payload: any = {
-        fullName: editForm.fullName.trim(),
-        email: editForm.email.trim().toLowerCase(),
-      };
-      if (editForm.password && editForm.password.trim().length >= 3) {
-        payload.password = editForm.password.trim();
-      }
-      await apiAuth(`/user/users/${editingId}`, "PUT", payload);
-      await loadUsers();
-      cancelEdit();
-      setMsg("Usuario actualizado ✅");
-    } catch (e: any) {
-      setMsg(e.message ?? String(e));
+const saveEdit = async () => {
+  if (!editingId) return;
+  try {
+    const oldUser = users.find((u) => u.id === editingId);
+    const oldEmail = (oldUser?.email ?? "").toLowerCase();
+
+    const newFullName = editForm.fullName.trim();
+    const newEmail = editForm.email.trim().toLowerCase();
+    const newPassword = editForm.password?.trim();
+
+    // 1) Actualizar perfil en user-api (nombre + email)
+    await apiAuth(`/user/users/${editingId}`, "PUT", {
+      fullName: newFullName,
+      email: newEmail,
+    });
+
+    // 2) Si cambió el email, actualizar también en auth-api
+    if (newEmail && newEmail !== oldEmail) {
+      await apiAuth(`/auth/users/${editingId}/email`, "PATCH", {
+        newEmail,
+      });
     }
-  };
+
+    // 3) Si vino password nuevo, actualizar en auth-api
+    if (newPassword && newPassword.length >= 3) {
+      await apiAuth(`/auth/users/${editingId}/password`, "PATCH", {
+        newPassword,
+      });
+    }
+
+    await loadUsers();
+    cancelEdit();
+    setMsg("Usuario actualizado ✅");
+  } catch (e: any) {
+    setMsg(e.message ?? String(e));
+  }
+};
 
   const changeRole = async (u: UserItem, newRole: string) => {
     try {
