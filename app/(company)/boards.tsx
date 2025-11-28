@@ -18,6 +18,21 @@ import { apiAuth } from "../../lib/api";
 import { Role, highestRoleInOrg } from "../../lib/rbac";
 import { useApp } from "../../lib/store";
 
+/* ========= Tema Condos / Lokaly (oscuro) ========= */
+const ui = {
+  bg: "#020617",
+  bgSoft: "#030712",
+  surface: "#020617",
+  card: "#020617",
+  border: "#1F2937",
+  borderSoft: "#111827",
+  primary: "#F4C15D",
+  primarySoft: "rgba(244,193,93,0.12)",
+  text: "#E5E7EB",
+  textMuted: "#94A3B8",
+  danger: "#F87171",
+};
+
 /** Backend sólo maneja ACTIVE / ARCHIVED */
 type BoardStatus = "ACTIVE" | "ARCHIVED";
 
@@ -52,7 +67,10 @@ const normalizeTenant = (raw: any): Tenant => ({
 });
 
 function labelOfTenant(t: Tenant) {
-  const pretty = t.name && t.name !== t.orgId ? t.name : (t.slug ?? `${t.orgId.slice(0, 6)}…`);
+  const pretty =
+    t.name && t.name !== t.orgId
+      ? t.name
+      : t.slug ?? `${t.orgId.slice(0, 6)}…`;
   return t.slug && pretty !== t.slug ? `${pretty} (${t.slug})` : pretty;
 }
 
@@ -88,9 +106,11 @@ function Select<T extends string>({
         style={{
           minWidth,
           padding: 10,
-          borderRadius: 12,
-          border: "1px solid #E5E7EB" as any,
-          background: "#fff",
+          borderRadius: 999,
+          border: `1px solid ${ui.border}` as any,
+          background: ui.bgSoft,
+          color: ui.text,
+          fontSize: 13,
         }}
       >
         {options.map((o) => (
@@ -103,7 +123,8 @@ function Select<T extends string>({
   }
 
   if (Platform.OS === "ios") {
-    const current = options.find((o) => o.value === value)?.label ?? String(value);
+    const current =
+      options.find((o) => o.value === value)?.label ?? String(value);
     return (
       <Pressable
         onPress={() => {
@@ -111,24 +132,25 @@ function Select<T extends string>({
             {
               options: [...options.map((o) => o.label), "Cancelar"],
               cancelButtonIndex: options.length,
-              userInterfaceStyle: "light",
+              userInterfaceStyle: "dark",
             },
             (idx) => {
-              if (idx != null && idx >= 0 && idx < options.length) onChange(options[idx].value);
+              if (idx != null && idx >= 0 && idx < options.length)
+                onChange(options[idx].value);
             }
           );
         }}
         style={{
           minWidth,
           borderWidth: 1,
-          borderColor: "#E5E7EB",
+          borderColor: ui.border,
           borderRadius: 999,
           paddingVertical: 10,
           paddingHorizontal: 14,
-          backgroundColor: "#fff",
+          backgroundColor: ui.bgSoft,
         }}
       >
-        <Text style={{ fontWeight: "600", color: "#111827" }}>{current}</Text>
+        <Text style={{ fontWeight: "600", color: ui.text }}>{current}</Text>
       </Pressable>
     );
   }
@@ -139,10 +161,10 @@ function Select<T extends string>({
       style={{
         minWidth,
         borderWidth: 1,
-        borderColor: "#E5E7EB",
-        borderRadius: 12,
+        borderColor: ui.border,
+        borderRadius: 999,
         overflow: "hidden",
-        backgroundColor: "#fff",
+        backgroundColor: ui.bgSoft,
         height: 44,
         justifyContent: "center",
       }}
@@ -151,7 +173,8 @@ function Select<T extends string>({
         selectedValue={value}
         onValueChange={(v) => onChange(v as T)}
         mode="dropdown"
-        style={{ height: 44, width: "100%" }}
+        style={{ height: 44, width: "100%", color: ui.text }}
+        dropdownIconColor={ui.text}
       >
         {options.map((o) => (
           <Picker.Item key={o.value} label={o.label} value={o.value} />
@@ -178,45 +201,107 @@ function PillButton({
   style?: any;
 }) {
   const palette = {
-    primary: { bg: "#2563EB", fg: "#fff" },
-    secondary: { bg: "#F1F5F9", fg: "#0F172A" },
-    warning: { bg: "#F59E0B", fg: "#fff" },
-    danger: { bg: "#EF4444", fg: "#fff" },
+    primary: { bg: "#1D4ED8", fg: "#F9FAFB" },
+    secondary: { bg: ui.bgSoft, fg: ui.text },
+    warning: { bg: "#F59E0B", fg: "#111827" },
+    danger: { bg: "#B91C1C", fg: "#F9FAFB" },
   } as const;
   const p = palette[tone];
-  const pv = size === "sm" ? 8 : 10;
+  const pv = size === "sm" ? 7 : 9;
   const ph = size === "sm" ? 12 : 14;
-  const fs = size === "sm" ? 12 : 14;
+  const fs = size === "sm" ? 11 : 13;
 
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         {
           backgroundColor: p.bg,
           borderRadius: 999,
           paddingVertical: pv,
           paddingHorizontal: ph,
-          opacity: disabled ? 0.6 : 1,
+          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
         },
         style,
       ]}
     >
-      <Text style={{ color: p.fg, fontWeight: "800", fontSize: fs }}>{label.toUpperCase()}</Text>
+      <Text style={{ color: p.fg, fontWeight: "700", fontSize: fs }}>
+        {label.toUpperCase()}
+      </Text>
     </Pressable>
   );
 }
 
 function StatusBadge({ status }: { status: BoardStatus }) {
-  const palette: Record<BoardStatus, { bg: string; fg: string }> = {
-    ACTIVE: { bg: "#E6FFED", fg: "#136F3A" },
-    ARCHIVED: { bg: "#F1F5F9", fg: "#475569" },
-  };
-  const p = palette[status] ?? { bg: "#F1F5F9", fg: "#0F172A" };
+  const palette: Record<BoardStatus, { bg: string; fg: string; label: string }> =
+    {
+      ACTIVE: {
+        bg: "rgba(34,197,94,0.18)",
+        fg: "#BBF7D0",
+        label: "ACTIVO",
+      },
+      ARCHIVED: {
+        bg: "rgba(148,163,184,0.18)",
+        fg: "#E5E7EB",
+        label: "ARCHIVADO",
+      },
+    };
+  const p = palette[status] ?? palette.ACTIVE;
   return (
-    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: p.bg }}>
-      <Text style={{ color: p.fg, fontWeight: "800", fontSize: 12 }}>{status}</Text>
+    <View
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: p.bg,
+      }}
+    >
+      <Text style={{ color: p.fg, fontWeight: "700", fontSize: 11 }}>
+        {p.label}
+      </Text>
+    </View>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        minWidth: 90,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: ui.border,
+        backgroundColor: ui.bgSoft,
+      }}
+    >
+      <Text
+        style={{
+          color: ui.textMuted,
+          fontSize: 11,
+          marginBottom: 4,
+        }}
+      >
+        {label.toUpperCase()}
+      </Text>
+      <Text
+        style={{
+          color: ui.text,
+          fontWeight: "800",
+          fontSize: 18,
+        }}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -236,20 +321,24 @@ export default function BoardsCompany() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const tenantIndex = useMemo(
-    () => new Map(tenants.map(t => [t.orgId, t.name ?? t.slug ?? t.orgId])),
+    () =>
+      new Map(tenants.map((t) => [t.orgId, t.name ?? t.slug ?? t.orgId])),
     [tenants]
   );
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // filtro extra
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [search, setSearch] = useState("");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [msg, setMsg] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // NEW: toggle para mostrar/ocultar formulario de creación
+  // toggle para mostrar/ocultar formulario de creación
   const [showCreate, setShowCreate] = useState(false);
 
   type OrgNameMap = Record<string, string>;
@@ -268,7 +357,10 @@ export default function BoardsCompany() {
   async function fetchTenantsByIds(ids: string[]) {
     if (!ids.length) return {} as OrgNameMap;
     try {
-      const res = await apiAuth(`/tenant/lookup?ids=${encodeURIComponent(ids.join(","))}`, "GET");
+      const res = await apiAuth(
+        `/tenant/lookup?ids=${encodeURIComponent(ids.join(","))}`,
+        "GET"
+      );
       const list = Array.isArray(res) ? res : res?.content ?? [];
       const dic: OrgNameMap = {};
       for (const t of list) {
@@ -282,14 +374,19 @@ export default function BoardsCompany() {
   }
 
   // RBAC
-  const myRole: Role = useMemo(() => highestRoleInOrg(me, selectedOrgId), [me, selectedOrgId]);
-  const canCrudBoards = myRole === "ADMINISTRADOR" || myRole === "SUPERADMIN";
+  const myRole: Role = useMemo(
+    () => highestRoleInOrg(me, selectedOrgId),
+    [me, selectedOrgId]
+  );
+  const canCrudBoards =
+    myRole === "ADMINISTRADOR" || myRole === "SUPERADMIN";
 
   const isSuperAdmin = useMemo(() => {
     if (!me) return false;
     return (
       (Array.isArray(me.roles) && me.roles.includes("SUPERADMIN")) ||
-      (Array.isArray(me.orgs) && me.orgs.some((o: any) => o.role === "SUPERADMIN"))
+      (Array.isArray(me.orgs) &&
+        me.orgs.some((o: any) => o.role === "SUPERADMIN"))
     );
   }, [me]);
 
@@ -320,11 +417,17 @@ export default function BoardsCompany() {
           if (!prev) {
             map.set(t.orgId, t);
           } else {
-            const prevName = prev.name && prev.name !== prev.orgId ? prev.name : undefined;
-            const nextName = t.name && t.name !== t.orgId ? t.name : undefined;
+            const prevName =
+              prev.name && prev.name !== prev.orgId ? prev.name : undefined;
+            const nextName =
+              t.name && t.name !== t.orgId ? t.name : undefined;
             map.set(
               t.orgId,
-              nextName ? { ...prev, ...t, name: nextName } : prevName ? prev : { ...prev, ...t }
+              nextName
+                ? { ...prev, ...t, name: nextName }
+                : prevName
+                ? prev
+                : { ...prev, ...t }
             );
           }
         });
@@ -335,16 +438,21 @@ export default function BoardsCompany() {
         }));
 
         setTenants(arr);
-        if (!selectedOrgId && arr.length > 0) setSelectedOrgId(arr[0].orgId);
+        if (!selectedOrgId && arr.length > 0)
+          setSelectedOrgId(arr[0].orgId);
         return;
       } catch {
         // cae a fromMe
       }
     }
 
-    const arr = fromMe.map((t) => ({ ...t, name: t.name ?? t.slug ?? undefined }));
+    const arr = fromMe.map((t) => ({
+      ...t,
+      name: t.name ?? t.slug ?? undefined,
+    }));
     setTenants(arr);
-    if (!selectedOrgId && arr.length > 0) setSelectedOrgId(arr[0].orgId);
+    if (!selectedOrgId && arr.length > 0)
+      setSelectedOrgId(arr[0].orgId);
   }, [me, isSuperAdmin, selectedOrgId]);
 
   useEffect(() => {
@@ -390,8 +498,8 @@ export default function BoardsCompany() {
 
   // Resolver nombres faltantes por lookup
   useEffect(() => {
-    const ids = Array.from(new Set(boards.map(b => String(b.orgId))));
-    const missing = ids.filter(id => {
+    const ids = Array.from(new Set(boards.map((b) => String(b.orgId))));
+    const missing = ids.filter((id) => {
       const val = tenantIndex.get(id);
       const resolved = orgNameById[id];
       if (resolved) return false;
@@ -402,14 +510,17 @@ export default function BoardsCompany() {
     if (missing.length) {
       (async () => {
         const dic = await fetchTenantsByIds(missing);
-        setOrgNameById(prev => ({ ...prev, ...dic }));
+        setOrgNameById((prev) => ({ ...prev, ...dic }));
       })();
     }
   }, [boards, tenantIndex, orgNameById]);
 
   // CRUD
   const createBoard = async () => {
-    if (!canCrudBoards) { setMsg("No tienes permisos para crear boards."); return; }
+    if (!canCrudBoards) {
+      setMsg("No tienes permisos para crear boards.");
+      return;
+    }
     try {
       setMsg("");
       if (!selectedOrgId || !name.trim()) {
@@ -424,7 +535,7 @@ export default function BoardsCompany() {
       setName("");
       setDescription("");
       await loadBoards();
-      setShowCreate(false); // cerrar formulario al crear
+      setShowCreate(false);
       setMsg("Board creado ✅");
     } catch (e: any) {
       setMsg(e.message ?? String(e));
@@ -432,7 +543,10 @@ export default function BoardsCompany() {
   };
 
   const updateBoard = async (id: string) => {
-    if (!canCrudBoards) { setMsg("No tienes permisos para editar boards."); return; }
+    if (!canCrudBoards) {
+      setMsg("No tienes permisos para editar boards.");
+      return;
+    }
     try {
       if (!name.trim()) {
         setMsg("El nombre no puede estar vacío.");
@@ -453,7 +567,10 @@ export default function BoardsCompany() {
   };
 
   const deleteBoard = async (id: string) => {
-    if (!canCrudBoards) { setMsg("No tienes permisos para eliminar boards."); return; }
+    if (!canCrudBoards) {
+      setMsg("No tienes permisos para eliminar boards.");
+      return;
+    }
     try {
       await apiAuth(`/board/boards/${id}`, "DELETE");
       await loadBoards();
@@ -464,9 +581,15 @@ export default function BoardsCompany() {
   };
 
   const changeStatus = async (id: string, status: BoardStatus) => {
-    if (!canCrudBoards) { setMsg("No tienes permisos para cambiar estado."); return; }
+    if (!canCrudBoards) {
+      setMsg("No tienes permisos para cambiar estado.");
+      return;
+    }
     try {
-      await apiAuth(`/board/boards/${id}/status?status=${encodeURIComponent(status)}`, "PATCH");
+      await apiAuth(
+        `/board/boards/${id}/status?status=${encodeURIComponent(status)}`,
+        "PATCH"
+      );
       await loadBoards();
       setMsg(`Estado cambiado a ${status} ✅`);
     } catch (e: any) {
@@ -474,28 +597,52 @@ export default function BoardsCompany() {
     }
   };
 
+  /* ===== Métricas y filtros en memoria ===== */
+  const totalBoards = boards.length;
+  const activeCount = boards.filter((b) => b.status !== "ARCHIVED").length;
+  const archivedCount = boards.filter((b) => b.status === "ARCHIVED").length;
+
+  const filteredBoards = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return boards.filter((b) => {
+      if (!includeArchived && b.status === "ARCHIVED") return false;
+      if (!term) return true;
+      return (
+        b.name.toLowerCase().includes(term) ||
+        (b.description ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [boards, includeArchived, search]);
+
   /* ===== Estilos base y grid ===== */
   const cardBase = {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: ui.border,
     borderRadius: 16,
-    backgroundColor: "#fff",
+    backgroundColor: ui.card,
     padding: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 1,
+    ...(Platform.OS === "web"
+      ? {
+          boxShadow: "0 18px 40px rgba(15,23,42,0.75)",
+        }
+      : {
+          shadowColor: "#000",
+          shadowOpacity: 0.35,
+          shadowRadius: 12,
+          elevation: 4,
+        }),
   } as const;
 
   const input = {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: ui.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "android" ? 8 : 12,
+    paddingVertical: Platform.OS === "android" ? 8 : 11,
     minHeight: 44,
-    fontSize: 16,
-    backgroundColor: "#FFFFFF",
+    fontSize: 14,
+    backgroundColor: ui.bgSoft,
+    color: ui.text,
   } as const;
 
   const cardWidth = useMemo(() => {
@@ -506,8 +653,8 @@ export default function BoardsCompany() {
 
   /* ===== Render ===== */
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#FAFAFB" }}>
-      <View style={{ flex: 1, alignItems: "center" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: ui.bg }}>
+      <View style={{ flex: 1, alignItems: "center", backgroundColor: ui.bg }}>
         <View style={{ width: maxW, flex: 1 }}>
           {/* TOP BAR */}
           <View
@@ -515,102 +662,283 @@ export default function BoardsCompany() {
               paddingHorizontal: 16,
               paddingVertical: isPhone ? 10 : 12,
               borderBottomWidth: 1,
-              borderColor: "#ECECEC",
-              backgroundColor: "#FFFFFF",
+              borderColor: ui.border,
+              backgroundColor: ui.bgSoft,
               flexDirection: isPhone ? "column" : "row",
               alignItems: isPhone ? "flex-start" : "center",
               justifyContent: "space-between",
               gap: isPhone ? 10 : 8,
-              ...(Platform.OS === "web" ? { position: "sticky" as any, top: 0, zIndex: 50 } : {}),
+              ...(Platform.OS === "web"
+                ? { position: "sticky" as any, top: 0, zIndex: 50 }
+                : {}),
             }}
           >
-            <Text style={{ fontSize: isTablet || isDesktop ? 20 : 18, fontWeight: "800" }}>Condos</Text>
-            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-              {!!me?.email && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 10,
+                  backgroundColor: ui.primarySoft,
+                  borderWidth: 1,
+                  borderColor: ui.primary,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 <Text
                   style={{
-                    color: "#475569",
-                    backgroundColor: "#F1F5F9",
+                    color: ui.primary,
+                    fontWeight: "800",
+                    fontSize: 15,
+                  }}
+                >
+                  C
+                </Text>
+              </View>
+              <View>
+                <Text
+                  style={{
+                    fontSize: isTablet || isDesktop ? 18 : 17,
+                    fontWeight: "800",
+                    color: ui.primary,
+                  }}
+                >
+                  Condos Admin
+                </Text>
+                <Text style={{ fontSize: 11, color: ui.textMuted }}>
+                  Gestión de condominios
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={{ flexDirection: "row", gap: 8, alignItems: "center" }}
+            >
+              {!!me?.email && (
+                <View
+                  style={{
                     paddingHorizontal: 10,
                     paddingVertical: 6,
-                    borderRadius: 10,
-                    fontSize: 12,
-                    fontWeight: "700",
-                    maxWidth: 280,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: ui.border,
+                    backgroundColor: ui.bg,
+                    maxWidth: 260,
                   }}
-                  numberOfLines={1}
                 >
-                  {me.email}
-                </Text>
+                  <Text
+                    style={{
+                      color: ui.text,
+                      fontSize: 12,
+                      fontWeight: "600",
+                    }}
+                    numberOfLines={1}
+                  >
+                    {me.email}
+                  </Text>
+                </View>
               )}
-              <PillButton label="Menú principal" tone="secondary" onPress={() => router.replace("/(app)/home")} />
-              <PillButton label="Salir" tone="danger" onPress={logout} />
+              <PillButton
+                label="Menú principal"
+                tone="secondary"
+                size="sm"
+                onPress={() => router.replace("/(app)/home")}
+              />
+              <PillButton
+                label="Salir"
+                tone="danger"
+                size="sm"
+                onPress={logout}
+              />
             </View>
           </View>
 
-          {/* SUB HEADER */}
+          {/* SUB HEADER + FILTROS */}
           <View
             style={{
               paddingHorizontal: 16,
-              paddingVertical: 10,
+              paddingVertical: 12,
               borderBottomWidth: 1,
-              borderColor: "#ECECEC",
-              backgroundColor: "#F9FAFB",
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 8,
+              borderColor: ui.border,
+              backgroundColor: ui.bgSoft,
+              gap: 10,
             }}
           >
-            <Text style={{ fontSize: 18, fontWeight: "800" }}>Condominios</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <View>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "800",
+                    color: ui.text,
+                  }}
+                >
+                  Condominios y colonias
+                </Text>
+                <Text style={{ fontSize: 12, color: ui.textMuted }}>
+                  Configura los tableros donde se gestionan las tareas.
+                </Text>
+              </View>
 
-            <View style={{ flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <Select
-                value={selectedOrgId as any}
-                onChange={(v) => setSelectedOrgId(String(v))}
-                options={tenants.map((t) => ({ label: labelOfTenant(t), value: t.orgId as any }))}
-                minWidth={220}
-              />
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Select
+                  value={selectedOrgId as any}
+                  onChange={(v) => setSelectedOrgId(String(v))}
+                  options={tenants.map((t) => ({
+                    label: labelOfTenant(t),
+                    value: t.orgId as any,
+                  }))}
+                  minWidth={220}
+                />
+              </View>
+            </View>
 
-              {/* Toggle archivados */}
-              {Platform.OS === "web" ? (
-                <label style={{ display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}>
-                  <input
-                    type="checkbox"
-                    checked={includeArchived}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIncludeArchived(e.target.checked)}
+            {/* Fila de métricas */}
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <MetricCard label="Total" value={totalBoards} />
+              <MetricCard label="Activos" value={activeCount} />
+              <MetricCard label="Archivados" value={archivedCount} />
+            </View>
+
+            {/* Filtros secundarios: buscador + estado */}
+            <View
+              style={{
+                flexDirection: isPhone ? "column" : "row",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  placeholder="Buscar condominio por nombre o descripción..."
+                  placeholderTextColor={ui.textMuted}
+                  value={search}
+                  onChangeText={setSearch}
+                  style={input}
+                />
+              </View>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 6,
+                  alignItems: "center",
+                }}
+              >
+                {/* Segmented control Activos / Activos + Archivados (web y native igual) */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: ui.border,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Pressable
+                    onPress={() => setIncludeArchived(false)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                      backgroundColor: !includeArchived
+                        ? ui.primarySoft
+                        : ui.bgSoft,
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: !includeArchived ? ui.primary : ui.textMuted,
+                        fontSize: 11,
+                        fontWeight: "700",
+                      }}
+                    >
+                      SOLO ACTIVOS
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setIncludeArchived(true)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                      backgroundColor: includeArchived
+                        ? ui.primarySoft
+                        : ui.bgSoft,
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: includeArchived ? ui.primary : ui.textMuted,
+                        fontSize: 11,
+                        fontWeight: "700",
+                      }}
+                    >
+                      ACTIVOS + ARCHIVADOS
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {canCrudBoards && (
+                  <PillButton
+                    label={showCreate ? "Ocultar" : "Crear condominio"}
+                    tone={showCreate ? "secondary" : "primary"}
+                    size="sm"
+                    onPress={() => setShowCreate((v) => !v)}
                   />
-                  Incluir archivados
-                </label>
-              ) : (
-                <PillButton
-                  label={includeArchived ? "Ocultar archivados" : "Incluir archivados"}
-                  tone="secondary"
-                  onPress={() => setIncludeArchived((v) => !v)}
-                />
-              )}
+                )}
 
-              {/* NEW: botón para mostrar/ocultar formulario de creación */}
-              {canCrudBoards && (
                 <PillButton
-                  label={showCreate ? "Ocultar" : "Crear condominio"}
-                  tone={showCreate ? "secondary" : "primary"}
-                  onPress={() => setShowCreate((v) => !v)}
+                  label="Recargar"
+                  size="sm"
+                  onPress={loadBoards}
                 />
-              )}
-
-              <PillButton label="Recargar" onPress={loadBoards} />
+              </View>
             </View>
           </View>
 
           {/* LISTA */}
           <FlatList
-            data={boards}
+            data={filteredBoards}
             keyExtractor={(b) => b.id}
             numColumns={numColumns}
-            columnWrapperStyle={numColumns > 1 ? { gap: gutter } : undefined}
-            contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 12 }}
+            columnWrapperStyle={
+              numColumns > 1 ? { gap: gutter } : undefined
+            }
+            contentContainerStyle={{
+              padding: 16,
+              paddingBottom: 100,
+              gap: 12,
+              backgroundColor: ui.bg,
+            }}
             refreshing={loading}
             onRefresh={loadBoards}
             ListHeaderComponent={
@@ -620,71 +948,181 @@ export default function BoardsCompany() {
                     style={{
                       padding: 10,
                       borderRadius: 12,
-                      backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
+                      backgroundColor: msg.includes("✅")
+                        ? "rgba(37,99,235,0.16)"
+                        : "rgba(248,113,113,0.12)",
                       borderWidth: 1,
-                      borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
+                      borderColor: msg.includes("✅")
+                        ? "#2563EB"
+                        : "#F87171",
                     }}
                   >
-                    <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>{msg}</Text>
+                    <Text
+                      style={{
+                        color: msg.includes("✅")
+                          ? "#BFDBFE"
+                          : "#FCA5A5",
+                      }}
+                    >
+                      {msg}
+                    </Text>
                   </View>
                 )}
 
-                {/* Crear: SOLO admin/superadmin — ahora con toggle */}
+                {/* Crear: SOLO admin/superadmin — con toggle */}
                 {canCrudBoards && showCreate && (
                   <View style={[cardBase, { gap: 8 }]}>
-                    <Text style={{ fontWeight: "800" }}>Crear nuevo condominio</Text>
+                    <Text
+                      style={{
+                        fontWeight: "800",
+                        color: ui.text,
+                        marginBottom: 4,
+                      }}
+                    >
+                      Crear nuevo condominio
+                    </Text>
                     <TextInput
                       placeholder="Nombre del condominio"
+                      placeholderTextColor={ui.textMuted}
                       value={name}
                       onChangeText={setName}
                       style={input}
                     />
                     <TextInput
                       placeholder="Descripción (opcional)"
+                      placeholderTextColor={ui.textMuted}
                       value={description}
                       onChangeText={setDescription}
                       style={input}
                     />
-                    <PillButton label="Crear" onPress={createBoard} disabled={!name.trim() || !selectedOrgId} />
+                    <PillButton
+                      label="Crear"
+                      onPress={createBoard}
+                      disabled={!name.trim() || !selectedOrgId}
+                    />
                   </View>
                 )}
 
                 {/* Encabezado listado */}
-                <View style={[cardBase, { padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }]}>
-                  <Text style={{ fontWeight: "800" }}>
-                    {selectedTenantLabel ? `Colonias de ${selectedTenantLabel}` : "Selecciona una empresa"}
-                  </Text>
-                  {loading && <ActivityIndicator />}
+                <View
+                  style={[
+                    cardBase,
+                    {
+                      padding: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      justifyContent: "space-between",
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontWeight: "800",
+                        color: ui.text,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {selectedTenantLabel
+                        ? `Colonias de ${selectedTenantLabel}`
+                        : "Selecciona una empresa para ver sus colonias"}
+                    </Text>
+                    <Text
+                      style={{
+                        color: ui.textMuted,
+                        fontSize: 11,
+                        marginTop: 2,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {filteredBoards.length} resultados
+                      {search.trim()
+                        ? ` para "${search.trim()}"`
+                        : ""}
+                    </Text>
+                  </View>
+                  {loading && (
+                    <ActivityIndicator color={ui.primary} />
+                  )}
                 </View>
               </View>
             }
             ListEmptyComponent={
-              <Text style={{ color: "#777", padding: 12 }}>
-                {loading ? "Cargando..." : "No hay boards para mostrar."}
-              </Text>
+              !loading && (
+                <View
+                  style={{
+                    alignItems: "center",
+                    paddingVertical: 40,
+                    gap: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: ui.text,
+                      fontSize: 15,
+                      fontWeight: "700",
+                    }}
+                  >
+                    No se encontraron condominios
+                  </Text>
+                  <Text
+                    style={{
+                      color: ui.textMuted,
+                      fontSize: 12,
+                      textAlign: "center",
+                      maxWidth: 260,
+                    }}
+                  >
+                    Ajusta el filtro de estado, limpia el buscador o crea
+                    un nuevo condominio.
+                  </Text>
+                </View>
+              )
             }
             renderItem={({ item: b }) => (
               <Pressable style={[cardBase, { width: cardWidth }]}>
                 {editingId === b.id ? (
                   canCrudBoards ? (
                     <>
+                      <Text
+                        style={{
+                          color: ui.textMuted,
+                          fontSize: 12,
+                          marginBottom: 4,
+                        }}
+                      >
+                        Editar condominio
+                      </Text>
                       <TextInput
                         placeholder="Nuevo nombre"
+                        placeholderTextColor={ui.textMuted}
                         value={name}
                         onChangeText={setName}
-                        style={input}
+                        style={[input, { marginBottom: 6 }]}
                       />
                       <TextInput
                         placeholder="Nueva descripción (opcional)"
+                        placeholderTextColor={ui.textMuted}
                         value={description}
                         onChangeText={setDescription}
-                        style={input}
+                        style={[input, { marginBottom: 10 }]}
                       />
-                      <View style={{ flexDirection: "row", gap: 8 }}>
-                        <PillButton label="Guardar" onPress={() => updateBoard(b.id)} />
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 8,
+                        }}
+                      >
+                        <PillButton
+                          label="Guardar"
+                          size="sm"
+                          onPress={() => updateBoard(b.id)}
+                        />
                         <PillButton
                           label="Cancelar"
                           tone="secondary"
+                          size="sm"
                           onPress={() => {
                             setEditingId(null);
                             setName("");
@@ -694,31 +1132,132 @@ export default function BoardsCompany() {
                       </View>
                     </>
                   ) : (
-                    <Text>No tienes permisos para editar este condominio.</Text>
+                    <Text style={{ color: ui.textMuted, fontSize: 12 }}>
+                      No tienes permisos para editar este condominio.
+                    </Text>
                   )
                 ) : (
                   <>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <Text style={{ fontWeight: "800", fontSize: 16 }} numberOfLines={1}>{b.name}</Text>
+                    {/* Header card */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text
+                          style={{
+                            fontWeight: "800",
+                            fontSize: 15,
+                            color: ui.text,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {b.name}
+                        </Text>
+                        <Text
+                          style={{
+                            color: ui.textMuted,
+                            fontSize: 11,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {orgLabel(b.orgId)}
+                        </Text>
+                      </View>
                       {!!b.status && <StatusBadge status={b.status} />}
                     </View>
 
-                    <Text style={{ color: "#475569" }} numberOfLines={1}>ID: {b.id}</Text>
-                    <Text style={{ color: "#64748B" }} numberOfLines={1}>Empresa (orgId): {orgLabel(b.orgId)}</Text>
-                    {!!b.description && <Text style={{ color: "#475569" }}>{b.description}</Text>}
-                    {!!b.createdAt && (
-                      <Text style={{ color: "#94A3B8" }}>Creado: {new Date(b.createdAt).toLocaleString()}</Text>
-                    )}
-                    {!!b.updatedAt && (
-                      <Text style={{ color: "#94A3B8" }}>Actualizado: {new Date(b.updatedAt).toLocaleString()}</Text>
-                    )}
+                    {/* Meta info */}
+                    <View style={{ marginBottom: 8 }}>
+                      <Text
+                        style={{ color: ui.textMuted, fontSize: 11 }}
+                        numberOfLines={1}
+                      >
+                        ID: {b.id}
+                      </Text>
+                      {!!b.description && (
+                        <Text
+                          style={{
+                            color: ui.text,
+                            marginTop: 4,
+                            fontSize: 13,
+                          }}
+                          numberOfLines={2}
+                        >
+                          {b.description}
+                        </Text>
+                      )}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 8,
+                          marginTop: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        {!!b.createdAt && (
+                          <Text
+                            style={{
+                              color: ui.textMuted,
+                              fontSize: 11,
+                            }}
+                          >
+                            Creado:{" "}
+                            {new Date(
+                              b.createdAt
+                            ).toLocaleDateString()}
+                          </Text>
+                        )}
+                        {!!b.updatedAt && (
+                          <Text
+                            style={{
+                              color: ui.textMuted,
+                              fontSize: 11,
+                            }}
+                          >
+                            · Actualizado:{" "}
+                            {new Date(
+                              b.updatedAt
+                            ).toLocaleDateString()}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
 
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {/* Acciones */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        marginTop: 4,
+                      }}
+                    >
+                      <PillButton
+                        label="Tareas"
+                        size="sm"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(company)/board-tasks",
+                            params: {
+                              boardId: b.id,
+                              orgId: b.orgId,
+                              boardName: b.name,
+                            },
+                          })
+                        }
+                      />
+
                       {canCrudBoards && (
                         <>
                           <PillButton
                             label="Editar"
                             tone="secondary"
+                            size="sm"
                             onPress={() => {
                               setEditingId(b.id);
                               setName(b.name);
@@ -729,24 +1268,28 @@ export default function BoardsCompany() {
                             <PillButton
                               label="Archivar"
                               tone="danger"
-                              onPress={() => changeStatus(b.id, "ARCHIVED")}
+                              size="sm"
+                              onPress={() =>
+                                changeStatus(b.id, "ARCHIVED")
+                              }
                             />
                           ) : (
-                            <PillButton label="Activar" onPress={() => changeStatus(b.id, "ACTIVE")} />
+                            <PillButton
+                              label="Activar"
+                              size="sm"
+                              onPress={() =>
+                                changeStatus(b.id, "ACTIVE")
+                              }
+                            />
                           )}
-                          <PillButton label="Eliminar" tone="danger" onPress={() => deleteBoard(b.id)} />
+                          <PillButton
+                            label="Eliminar"
+                            tone="danger"
+                            size="sm"
+                            onPress={() => deleteBoard(b.id)}
+                          />
                         </>
                       )}
-
-                      <PillButton
-                        label="Tareas"
-                        onPress={() =>
-                          router.push({
-                            pathname: "/(company)/board-tasks",
-                            params: { boardId: b.id, orgId: b.orgId, boardName: b.name },
-                          })
-                        }
-                      />
                     </View>
                   </>
                 )}
