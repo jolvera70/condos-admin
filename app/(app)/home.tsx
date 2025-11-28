@@ -7,12 +7,14 @@ import { useRouter } from "expo-router";
 import React, { PropsWithChildren, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   Text,
-  View,
+  View
 } from "react-native";
+const condosLogo = require("../../assets/images/iconCondos.png");
 
 const ui = {
   bg: "#020617",
@@ -332,15 +334,15 @@ function TopBar({ email, onLogout }: { email?: string; onLogout: () => void }) {
             justifyContent: "center",
           }}
         >
-          <Text
-            style={{
-              color: ui.primary,
-              fontWeight: "800",
-              fontSize: 15,
-            }}
-          >
-            C
-          </Text>
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
         </View>
         <View>
           <Text
@@ -361,11 +363,12 @@ function TopBar({ email, onLogout }: { email?: string; onLogout: () => void }) {
           >
             Panel de control
           </Text>
-        </View>
+        </View>       
       </View>
 
       {/* Usuario + salir */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+         <PillButton label="Salir" tone="danger" onPress={onLogout} />
         {!!email && (
           <View
             style={{
@@ -388,7 +391,7 @@ function TopBar({ email, onLogout }: { email?: string; onLogout: () => void }) {
             </Text>
           </View>
         )}
-        <PillButton label="Salir" tone="danger" onPress={onLogout} />
+       
       </View>
     </View>
   );

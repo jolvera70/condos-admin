@@ -6,15 +6,43 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   Pressable,
   Text,
   TextInput,
   useWindowDimensions,
-  View,
+  View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { apiAuth } from "../../lib/api";
 import { useApp } from "../../lib/store";
+const condosLogo = require("../../assets/images/iconCondos.png");
+
+/* ======================= Theme estilo Lokaly ======================= */
+
+const lokalyTheme = {
+  bg: "#050509",
+  bgAlt: "#080812",
+  surface: "#101018",
+  surfaceSoft: "#171725",
+  border: "#262637",
+  borderSoft: "#202033",
+  primary: "#F4C15D",
+  primarySoft: "rgba(244, 193, 93, 0.14)",
+  danger: "#F87171",
+  text: "#F9FAFB",
+  textMuted: "#9CA3AF",
+  textSubtle: "#6B7280",
+  chipBg: "#111827",
+  chipBorder: "#1F2937",
+
+  boardBg: "#F9FAFB",
+  boardCard: "#FFFFFF",
+  boardBorder: "#E5E7EB",
+  boardText: "#111827",
+  boardTextMuted: "#6B7280",
+};
 
 /** Backend sólo maneja ACTIVE / ARCHIVED */
 type BoardStatus = "ACTIVE" | "ARCHIVED";
@@ -39,9 +67,7 @@ export default function BoardsAdmin() {
   const { me, logout } = useApp();
   const router = useRouter();
   const { width } = useWindowDimensions();
-
-  // 2 columnas en iPad/desktop
-  const twoCols = width >= 820;
+  const twoCols = width >= 820; // 2 columnas en iPad/desktop
 
   // Datos base
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -63,14 +89,17 @@ export default function BoardsAdmin() {
     if (!me) return false;
     return (
       (Array.isArray(me.roles) && me.roles.includes("SUPERADMIN")) ||
-      (Array.isArray(me.orgs) && me.orgs.some((o: any) => o.role === "SUPERADMIN"))
+      (Array.isArray(me.orgs) &&
+        me.orgs.some((o: any) => o.role === "SUPERADMIN"))
     );
   }, [me]);
 
   const myRoleInOrg = useMemo(() => {
     if (!me || !selectedOrgId) return "";
     const found = (me.orgs ?? []).find((o: any) => o.orgId === selectedOrgId);
-    return (found?.role || (me.roles ?? [])[0] || "").toString().toUpperCase();
+    return (
+      (found?.role || (me.roles ?? [])[0] || "").toString().toUpperCase()
+    );
   }, [me, selectedOrgId]);
 
   // Inicializar orgId desde me.orgs
@@ -100,7 +129,8 @@ export default function BoardsAdmin() {
           name: o.name ?? o.orgId,
         }));
         setTenants(fallback);
-        if (!selectedOrgId && fallback.length > 0) setSelectedOrgId(fallback[0].orgId);
+        if (!selectedOrgId && fallback.length > 0)
+          setSelectedOrgId(fallback[0].orgId);
       }
     } else {
       const arr: Tenant[] = (me?.orgs ?? []).map((o: any) => ({
@@ -116,65 +146,70 @@ export default function BoardsAdmin() {
     loadTenants();
   }, [loadTenants]);
 
-const loadBoards = useCallback(async () => {
-  setMsg("");
-  if (!selectedOrgId) {
-    setBoards([]);
-    setMsg("Selecciona una empresa para ver sus colonias.");
-    return;
-  }
-  setLoading(true);
-  try {
-    const qs =
-      `?page=0&size=1000` +
-      (includeArchived ? `&includeArchived=true` : ``) +
-      `&orgId=${encodeURIComponent(selectedOrgId)}`;
-
-    const raw = await apiAuth(`/board/boards${qs}`, "GET");
-    const list = Array.isArray(raw) ? raw : raw?.content ?? [];
-
-    // 1) Mapeo + normalización básica
-    let arr: Board[] = list.map((b: any) => {
-      const rawStatus = (b.status ?? b.boardStatus ?? b.state ?? "").toString().trim().toUpperCase();
-      const norm: BoardStatus = rawStatus === "ARCHIVED" ? "ARCHIVED" : "ACTIVE";
-      return {
-        id: String(b.id ?? b.boardId ?? b._id),
-        orgId: String(b.orgId),
-        name: String(b.name),
-        description: b.description,
-        createdAt: b.createdAt,
-        updatedAt: b.updatedAt,
-        status: norm,
-      };
-    });
-
-    // 2) Fallback (solo si pedimos archivados): revalida contra el detalle
-    if (includeArchived) {
-      arr = await Promise.all(
-        arr.map(async (b) => {
-          if (b.status === "ARCHIVED") return b; // ya está bien
-          try {
-            const det = await apiAuth(`/board/boards/${b.id}`, "GET");
-            const raw2 = (det?.status ?? det?.boardStatus ?? det?.state ?? "")
-              .toString()
-              .trim()
-              .toUpperCase();
-            const fixed = raw2 === "ARCHIVED" ? "ARCHIVED" : "ACTIVE";
-            return { ...b, status: fixed };
-          } catch {
-            return b;
-          }
-        })
-      );
+  const loadBoards = useCallback(async () => {
+    setMsg("");
+    if (!selectedOrgId) {
+      setBoards([]);
+      setMsg("Selecciona una empresa para ver sus colonias.");
+      return;
     }
+    setLoading(true);
+    try {
+      const qs =
+        `?page=0&size=1000` +
+        (includeArchived ? `&includeArchived=true` : ``) +
+        `&orgId=${encodeURIComponent(selectedOrgId)}`;
 
-    setBoards(arr);
-  } catch (e: any) {
-    setMsg(e.message ?? String(e));
-  } finally {
-    setLoading(false);
-  }
-}, [selectedOrgId, includeArchived]);
+      const raw = await apiAuth(`/board/boards${qs}`, "GET");
+      const list = Array.isArray(raw) ? raw : raw?.content ?? [];
+
+      // 1) Mapeo + normalización básica
+      let arr: Board[] = list.map((b: any) => {
+        const rawStatus = (b.status ?? b.boardStatus ?? b.state ?? "")
+          .toString()
+          .trim()
+          .toUpperCase();
+        const norm: BoardStatus =
+          rawStatus === "ARCHIVED" ? "ARCHIVED" : "ACTIVE";
+        return {
+          id: String(b.id ?? b.boardId ?? b._id),
+          orgId: String(b.orgId),
+          name: String(b.name),
+          description: b.description,
+          createdAt: b.createdAt,
+          updatedAt: b.updatedAt,
+          status: norm,
+        };
+      });
+
+      // 2) Fallback (solo si pedimos archivados): revalida contra el detalle
+      if (includeArchived) {
+        arr = await Promise.all(
+          arr.map(async (b) => {
+            if (b.status === "ARCHIVED") return b; // ya está bien
+            try {
+              const det = await apiAuth(`/board/boards/${b.id}`, "GET");
+              const raw2 = (det?.status ?? det?.boardStatus ?? det?.state ?? "")
+                .toString()
+                .trim()
+                .toUpperCase();
+              const fixed: BoardStatus =
+                raw2 === "ARCHIVED" ? "ARCHIVED" : "ACTIVE";
+              return { ...b, status: fixed };
+            } catch {
+              return b;
+            }
+          })
+        );
+      }
+
+      setBoards(arr);
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedOrgId, includeArchived]);
 
   useEffect(() => {
     loadBoards();
@@ -236,7 +271,10 @@ const loadBoards = useCallback(async () => {
 
   const changeStatus = async (id: string, status: BoardStatus) => {
     try {
-      await apiAuth(`/board/boards/${id}/status?status=${encodeURIComponent(status)}`, "PATCH");
+      await apiAuth(
+        `/board/boards/${id}/status?status=${encodeURIComponent(status)}`,
+        "PATCH"
+      );
       await loadBoards();
       setMsg(`Estado cambiado a ${status} ✅`);
     } catch (e: any) {
@@ -245,30 +283,47 @@ const loadBoards = useCallback(async () => {
   };
 
   /* =================== UI helpers =================== */
+
   const card: any = {
     borderWidth: 1,
-    borderColor: "#EAEAEA",
-    borderRadius: 16,
-    backgroundColor: "#fff",
+    borderColor: lokalyTheme.borderSoft,
+    borderRadius: 18,
+    backgroundColor: lokalyTheme.surface,
     padding: 14,
     ...(Platform.OS === "web"
-      ? { boxShadow: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10)" }
+      ? {
+          boxShadow: "0 18px 45px rgba(0,0,0,0.65)",
+        }
       : {}),
   };
+
   const input = {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: lokalyTheme.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "web" ? 10 : 12,
+    backgroundColor: lokalyTheme.bgAlt,
+    color: lokalyTheme.text,
+    fontSize: 13,
   } as const;
 
-
-function getBoardStatusUI(status?: BoardStatus) {
-  const s = String(status || "ACTIVE").toUpperCase() as BoardStatus;
-  if (s === "ARCHIVED") return { pillBg: "#F1F5F9", pillFg: "#475569", bar: "#9CA3AF", label: "ARCHIVED" };
-  return { pillBg: "#E6FFED", pillFg: "#136F3A", bar: "#10B981", label: "ACTIVE" };
-}
+  function getBoardStatusUI(status?: BoardStatus) {
+    const s = String(status || "ACTIVE").toUpperCase() as BoardStatus;
+    if (s === "ARCHIVED")
+      return {
+        pillBg: "#1E293B",
+        pillFg: "#E5E7EB",
+        bar: "#9CA3AF",
+        label: "ARCHIVED",
+      };
+    return {
+      pillBg: "rgba(16,185,129,0.18)",
+      pillFg: "#6EE7B7",
+      bar: "#10B981",
+      label: "ACTIVE",
+    };
+  }
 
   function PillButton({
     label,
@@ -286,10 +341,10 @@ function getBoardStatusUI(status?: BoardStatus) {
     style?: any;
   }) {
     const palette = {
-      primary: { bg: "#2563EB", bg2: "#1D4ED8", fg: "#fff" },
-      secondary: { bg: "#F1F5F9", bg2: "#E2E8F0", fg: "#0F172A" },
-      warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#fff" },
-      danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#fff" },
+      primary: { bg: lokalyTheme.primary, bg2: "#E0A93F", fg: "#111827" },
+      secondary: { bg: "#111827", bg2: "#020617", fg: "#E5E7EB" },
+      warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#111827" },
+      danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#F9FAFB" },
     }[tone];
 
     const padV = size === "sm" ? 8 : 10;
@@ -303,26 +358,64 @@ function getBoardStatusUI(status?: BoardStatus) {
           paddingHorizontal: padH,
           paddingVertical: padV,
           borderRadius: 999,
-          backgroundColor: disabled ? "#CBD5E1" : pressed ? palette.bg2 : palette.bg,
+          backgroundColor: disabled
+            ? "rgba(148,163,184,0.45)"
+            : pressed
+            ? palette.bg2
+            : palette.bg,
           ...(style || {}),
         })}
       >
-        <Text style={{ color: palette.fg, fontWeight: "800" }}>{label.toUpperCase()}</Text>
+        <Text
+          style={{
+            color: palette.fg,
+            fontWeight: "800",
+            fontSize: 11,
+            letterSpacing: 0.7,
+          }}
+        >
+          {label.toUpperCase()}
+        </Text>
       </Pressable>
     );
   }
 
-  function StatusPill({ status, style }: { status?: BoardStatus; style?: any }) {
+  function StatusPill({
+    status,
+    style,
+  }: {
+    status?: BoardStatus;
+    style?: any;
+  }) {
     const ui = getBoardStatusUI(status);
     return (
-      <View style={[{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: ui.pillBg }, style]}>
-        <Text style={{ color: ui.pillFg, fontWeight: "800", fontSize: 12 }}>{ui.label}</Text>
+      <View
+        style={[
+          {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: ui.pillBg,
+          },
+          style,
+        ]}
+      >
+        <Text
+          style={{
+            color: ui.pillFg,
+            fontWeight: "800",
+            fontSize: 11,
+            letterSpacing: 0.7,
+          }}
+        >
+          {ui.label}
+        </Text>
       </View>
     );
   }
 
-  /* ============== Selector Tenant (iOS bonito) ============== */
-  /* ============== Selector Tenant (robusto por plataforma) ============== */
+  /* ============== Selector Tenant (por plataforma) ============== */
+
   const selectedTenant = tenants.find((t) => t.orgId === selectedOrgId);
 
   const TenantSelector = () => {
@@ -332,7 +425,14 @@ function getBoardStatusUI(status?: BoardStatus) {
         <select
           value={selectedOrgId}
           onChange={(e) => setSelectedOrgId(e.currentTarget.value)}
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any, minWidth: 260 }}
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #4B5563",
+            minWidth: 260,
+            background: "#020617",
+            color: "#E5E7EB",
+          }}
         >
           {!selectedOrgId && <option value="">— elige —</option>}
           {tenants.map((t) => (
@@ -344,41 +444,51 @@ function getBoardStatusUI(status?: BoardStatus) {
       );
     }
 
-    // ANDROID: Picker en modo dropdown (no rompe layout)
+    // ANDROID: Picker
     if (Platform.OS === "android") {
       return (
         <View
           style={{
             borderWidth: 1,
-            borderColor: "#E5E7EB",
+            borderColor: "#4B5563",
             borderRadius: 10,
             minHeight: 44,
             justifyContent: "center",
-            backgroundColor: "#fff",
+            backgroundColor: "#020617",
           }}
         >
           <Picker
             selectedValue={selectedOrgId}
             onValueChange={(val) => setSelectedOrgId(String(val))}
             mode="dropdown"
-            style={{ height: 44 }}
-            itemStyle={{ fontSize: 14 }}
+            style={{ height: 44, color: "#E5E7EB" }}
+            dropdownIconColor="#E5E7EB"
           >
             {!selectedOrgId && <Picker.Item label="— elige —" value="" />}
             {tenants.map((t) => (
-              <Picker.Item key={t.orgId} label={`${t.name} (${t.slug ?? t.orgId})`} value={t.orgId} />
+              <Picker.Item
+                key={t.orgId}
+                label={`${t.name} (${t.slug ?? t.orgId})`}
+                value={t.orgId}
+              />
             ))}
           </Picker>
         </View>
       );
     }
 
-    // iOS/iPad: ActionSheet (estable, no encimado)
+    // iOS: ActionSheet
     const currentLabel = selectedTenant
       ? `${selectedTenant.name} (${selectedTenant.slug ?? selectedTenant.orgId})`
       : "— elige —";
 
-    const options = ["— elige —", ...tenants.map((t) => `${t.name} (${t.slug ?? t.orgId})`), "Cancelar"];
+    const options = [
+      "— elige —",
+      ...tenants.map(
+        (t) => `${t.name} (${t.slug ?? t.orgId})`
+      ),
+      "Cancelar",
+    ];
     const cancelButtonIndex = options.length - 1;
 
     const openSheet = () => {
@@ -387,7 +497,7 @@ function getBoardStatusUI(status?: BoardStatus) {
           title: "Selecciona empresa",
           options,
           cancelButtonIndex,
-          userInterfaceStyle: "light",
+          userInterfaceStyle: "dark",
         },
         (idx) => {
           if (idx === cancelButtonIndex) return;
@@ -406,103 +516,112 @@ function getBoardStatusUI(status?: BoardStatus) {
         onPress={openSheet}
         style={({ pressed }) => ({
           borderWidth: 1,
-          borderColor: "#E5E7EB",
+          borderColor: "#4B5563",
           borderRadius: 10,
           minHeight: 44,
-          backgroundColor: pressed ? "#F8FAFC" : "#fff",
+          backgroundColor: pressed ? "#020617" : "#020617",
           justifyContent: "center",
           paddingHorizontal: 12,
           minWidth: 260,
         })}
       >
-        <Text style={{ fontWeight: "700", color: "#111827" }} numberOfLines={1}>
+        <Text
+          style={{ fontWeight: "700", color: "#E5E7EB" }}
+          numberOfLines={1}
+        >
           {currentLabel}
         </Text>
-        <Text style={{ position: "absolute", right: 12, color: "#94A3B8" }}>▼</Text>
+        <Text
+          style={{
+            position: "absolute",
+            right: 12,
+            color: "#94A3B8",
+            fontSize: 12,
+          }}
+        >
+          ▼
+        </Text>
       </Pressable>
     );
   };
 
   /* =================== Render =================== */
   return (
-    <View style={{ flex: 1, backgroundColor: "#FAFAFB" }}>
-      {/* TOP BAR */}
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: lokalyTheme.bg,
+      }}
+    >
+      {/* TOP BAR uniforme */}
+      <TopBar
+        email={me?.email}
+        onMenu={() => router.replace("/(app)/home")}
+        onLogout={logout}
+      />
+
+      {/* HEADER de la página */}
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderColor: "#ECECEC",
-          backgroundColor: "#FFFFFF",
+          height: 64,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
+          paddingHorizontal: 18,
+          borderBottomWidth: 1,
+          borderColor: lokalyTheme.borderSoft,
+          backgroundColor: lokalyTheme.bgAlt,
         }}
       >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>Condos Admin</Text>
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          {!!me?.email && (
+        <View>
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "700",
+              color: lokalyTheme.primary,
+            }}
+          >
+            Colonias / Condominios
+          </Text>
+          <Text
+            style={{
+              fontSize: 12,
+              color: lokalyTheme.textMuted,
+              marginTop: 2,
+            }}
+          >
+            Administra las colonias asociadas a cada empresa.
+          </Text>
+        </View>
+
+        {!!myRoleInOrg && (
+          <View
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: lokalyTheme.borderSoft,
+              backgroundColor: lokalyTheme.surface,
+            }}
+          >
             <Text
               style={{
-                color: "#475569",
-                backgroundColor: "#F1F5F9",
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 10,
-                fontSize: 12,
+                color: lokalyTheme.text,
+                fontSize: 11,
                 fontWeight: "700",
               }}
             >
-              {me.email}
+              Rol: {myRoleInOrg}
             </Text>
-          )}
-          <PillButton label="MENÚ PRINCIPAL" tone="secondary" onPress={() => router.replace("/(app)/home")} />
-          <PillButton label="SALIR" tone="danger" size="sm" onPress={logout} />
-        </View>
-      </View>
-
-      {/* SUB HEADER */}
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          borderBottomWidth: 1,
-          borderColor: "#ECECEC",
-          backgroundColor: "#F9FAFB",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>Gestión de Colonias</Text>
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          {!!myRoleInOrg && (
-            <Text
-              style={{
-                color: "#111827",
-                backgroundColor: "#EEF2FF",
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: "800",
-              }}
-            >
-              Mi rol: {myRoleInOrg}
-            </Text>
-          )}
-          <PillButton label="RECARGAR" tone="secondary" onPress={loadBoards} />
-        </View>
+          </View>
+        )}
       </View>
 
       {/* LISTA */}
       <FlatList
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        style={{ flex: 1, backgroundColor: lokalyTheme.bg }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
         keyboardShouldPersistTaps="handled"
         data={boards}
         keyExtractor={(b) => b.id}
@@ -517,32 +636,73 @@ function getBoardStatusUI(status?: BoardStatus) {
                 style={{
                   padding: 10,
                   borderRadius: 12,
-                  backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
+                  backgroundColor: msg.includes("✅")
+                    ? "rgba(22,163,74,0.12)"
+                    : "rgba(248,113,113,0.10)",
                   borderWidth: 1,
-                  borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
+                  borderColor: msg.includes("✅")
+                    ? "rgba(34,197,94,0.6)"
+                    : "rgba(248,113,113,0.65)",
                 }}
               >
-                <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>{msg}</Text>
+                <Text
+                  style={{
+                    color: msg.includes("✅")
+                      ? "#4ADE80"
+                      : lokalyTheme.danger,
+                    fontSize: 12,
+                  }}
+                >
+                  {msg}
+                </Text>
               </View>
             )}
 
             {/* Filtros / empresa / archivados */}
             <View style={{ ...card, gap: 12 }}>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-                <Text style={{ fontWeight: "800" }}>Empresa</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    fontWeight: "800",
+                    color: lokalyTheme.text,
+                  }}
+                >
+                  Empresa
+                </Text>
                 <TenantSelector />
                 {Platform.OS === "web" ? (
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      userSelect: "none",
+                      color: lokalyTheme.textMuted,
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={includeArchived}
-                      onChange={(e: any) => setIncludeArchived(e.currentTarget.checked)}
+                      onChange={(e: any) =>
+                        setIncludeArchived(e.currentTarget.checked)
+                      }
                     />
                     <Text>Incluir archivados</Text>
                   </label>
                 ) : (
                   <PillButton
-                    label={includeArchived ? "OCULTAR ARCHIVADOS" : "INCLUIR ARCHIVADOS"}
+                    label={
+                      includeArchived
+                        ? "OCULTAR ARCHIVADOS"
+                        : "INCLUIR ARCHIVADOS"
+                    }
                     onPress={() => setIncludeArchived((v) => !v)}
                     tone="secondary"
                   />
@@ -558,97 +718,260 @@ function getBoardStatusUI(status?: BoardStatus) {
 
               {showCreate && (
                 <View style={{ gap: 8 }}>
-                  <TextInput placeholder="Nombre" value={name} onChangeText={setName} style={input} />
+                  <Text
+                    style={{
+                      color: lokalyTheme.text,
+                      fontWeight: "700",
+                      fontSize: 14,
+                    }}
+                  >
+                    Crear nuevo condominio
+                  </Text>
+                  <TextInput
+                    placeholder="Nombre"
+                    placeholderTextColor={lokalyTheme.textMuted}
+                    value={name}
+                    onChangeText={setName}
+                    style={input}
+                  />
                   <TextInput
                     placeholder="Descripción (opcional)"
+                    placeholderTextColor={lokalyTheme.textMuted}
                     value={description}
                     onChangeText={setDescription}
                     style={input}
                   />
-                  <PillButton label="CREAR" onPress={createBoard} disabled={!name.trim() || !selectedOrgId} />
+                  <PillButton
+                    label="CREAR"
+                    onPress={createBoard}
+                    disabled={!name.trim() || !selectedOrgId}
+                  />
                 </View>
               )}
             </View>
 
             {/* Encabezado listado */}
-            <View style={{ ...card, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ fontWeight: "800" }}>
-                Colonias de {(tenants.find((t) => t.orgId === selectedOrgId)?.name ?? selectedOrgId) || "…"}
+            <View
+              style={{
+                ...card,
+                padding: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: "800",
+                  color: lokalyTheme.text,
+                }}
+              >
+                Colonias de{" "}
+                {(
+                  tenants.find((t) => t.orgId === selectedOrgId)?.name ??
+                  selectedOrgId
+                ) || "…"}
               </Text>
-              {loading && <ActivityIndicator />}
+              {loading && (
+                <ActivityIndicator color={lokalyTheme.primary} />
+              )}
             </View>
           </View>
         }
         ListEmptyComponent={
-          <Text style={{ color: "#777", padding: 12 }}>
-            {loading ? "Cargando..." : "No hay colonias para mostrar."}
+          <Text
+            style={{
+              color: lokalyTheme.textMuted,
+              padding: 12,
+            }}
+          >
+            {loading
+              ? "Cargando..."
+              : "No hay colonias para mostrar."}
           </Text>
         }
         renderItem={({ item: b }) => {
           const isEditing = editingId === b.id;
-          const ui = getBoardStatusUI(b.status);
-          if (Platform.OS === "web") {
-            console.log("Board status raw:", b.status, "name:", b.name);
-          }
+          const uiStatus = getBoardStatusUI(b.status);
+
           return (
             <View
               style={{
-                position: "relative",               // 👈 para posicionar el pill
+                position: "relative",
                 padding: 12,
                 borderWidth: 1,
-                borderColor: "#F3F4F6",
-                borderRadius: 12,
-                backgroundColor: "#fff",
+                borderColor: lokalyTheme.borderSoft,
+                borderRadius: 18,
+                backgroundColor: lokalyTheme.surface,
                 marginTop: 8,
                 gap: 8,
                 ...(Platform.OS === "web"
-                  ? { boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 1px 2px rgba(16,24,40,.06)" }
+                  ? {
+                      boxShadow:
+                        "0 16px 40px rgba(15,23,42,0.8)",
+                    }
                   : {}),
                 flexBasis: twoCols ? "48%" : "100%",
                 maxWidth: twoCols ? "48%" : "100%",
-                borderLeftWidth: 6,                 // 👈 barra por estado
-                borderLeftColor: ui.bar,
+                borderLeftWidth: 6,
+                borderLeftColor: uiStatus.bar,
               }}
-
             >
-              {/* Pill en la esquina superior derecha */}
-              <StatusPill status={b.status} style={{ position: "absolute", top: 10, right: 12 }} />
+              {/* pill estado */}
+              <StatusPill
+                status={b.status}
+                style={{ position: "absolute", top: 10, right: 12 }}
+              />
 
               {!isEditing ? (
                 <>
-                  <Text style={{ fontWeight: "800", fontSize: 16 }} numberOfLines={1}>
+                  <Text
+                    style={{
+                      fontWeight: "800",
+                      fontSize: 16,
+                      color: lokalyTheme.text,
+                    }}
+                    numberOfLines={1}
+                  >
                     {b.name}
                   </Text>
 
-                  <Text style={{ color: "#64748B", fontSize: 12 }}>ID: {b.id}</Text>
-                  <Text style={{ color: "#64748B", fontSize: 12 }}>Empresa: {b.orgId}</Text>
-                  {!!b.description && <Text>Descripción: {b.description}</Text>}
+                  <Text
+                    style={{
+                      color: lokalyTheme.textMuted,
+                      fontSize: 12,
+                    }}
+                  >
+                    ID: {b.id}
+                  </Text>
+                  <Text
+                    style={{
+                      color: lokalyTheme.textMuted,
+                      fontSize: 12,
+                    }}
+                  >
+                    Empresa: {b.orgId}
+                  </Text>
+                  {!!b.description && (
+                    <Text
+                      style={{
+                        color: lokalyTheme.text,
+                        fontSize: 12,
+                      }}
+                    >
+                      Descripción: {b.description}
+                    </Text>
+                  )}
                   {!!b.updatedAt && (
-                    <Text style={{ color: "#64748B" }}>
-                      Actualizado: {new Date(b.updatedAt).toLocaleString()}
+                    <Text
+                      style={{
+                        color: lokalyTheme.textMuted,
+                        fontSize: 12,
+                      }}
+                    >
+                      Actualizado:{" "}
+                      {new Date(b.updatedAt).toLocaleString()}
                     </Text>
                   )}
 
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    <PillButton label="EDITAR" tone="secondary" onPress={() => { setEditingId(b.id); setName(b.name); setDescription(b.description ?? ""); }} />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <PillButton
+                      label="EDITAR"
+                      tone="secondary"
+                      onPress={() => {
+                        setEditingId(b.id);
+                        setName(b.name);
+                        setDescription(b.description ?? "");
+                      }}
+                    />
                     {b.status !== "ARCHIVED" ? (
-                      <PillButton label="ARCHIVAR" tone="warning" onPress={() => changeStatus(b.id, "ARCHIVED")} />
+                      <PillButton
+                        label="ARCHIVAR"
+                        tone="warning"
+                        onPress={() =>
+                          changeStatus(b.id, "ARCHIVED")
+                        }
+                      />
                     ) : (
-                      <PillButton label="ACTIVAR" onPress={() => changeStatus(b.id, "ACTIVE")} />
+                      <PillButton
+                        label="ACTIVAR"
+                        onPress={() =>
+                          changeStatus(b.id, "ACTIVE")
+                        }
+                      />
                     )}
                     <PillButton
                       label="TAREAS"
                       onPress={() =>
-                        router.push({ pathname: "../(admin)/board-tasks", params: { boardId: b.id, orgId: b.orgId, boardName: b.name } })
+                        router.push({
+                          pathname: "../(admin)/board-tasks",
+                          params: {
+                            boardId: b.id,
+                            orgId: b.orgId,
+                            boardName: b.name,
+                          },
+                        })
                       }
                     />
                   </View>
                 </>
               ) : (
-                // ... editor igual que ya lo tienes ...
                 <>
-                  <Text style={{ fontWeight: "800" }}>Editar condominio</Text>
-                  {/* ... */}
+                  <Text
+                    style={{
+                      fontWeight: "800",
+                      color: lokalyTheme.text,
+                    }}
+                  >
+                    Editar condominio
+                  </Text>
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Nombre"
+                    placeholderTextColor={lokalyTheme.textMuted}
+                    style={input}
+                  />
+                  <TextInput
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Descripción (opcional)"
+                    placeholderTextColor={lokalyTheme.textMuted}
+                    style={input}
+                  />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <PillButton
+                      label="GUARDAR"
+                      onPress={() => updateBoard(b.id)}
+                      disabled={!name.trim()}
+                    />
+                    <PillButton
+                      label="CANCELAR"
+                      tone="secondary"
+                      onPress={() => {
+                        setEditingId(null);
+                        setName("");
+                        setDescription("");
+                      }}
+                    />
+                    <PillButton
+                      label="ELIMINAR"
+                      tone="danger"
+                      onPress={() => deleteBoard(b.id)}
+                    />
+                  </View>
                 </>
               )}
             </View>
@@ -656,6 +979,165 @@ function getBoardStatusUI(status?: BoardStatus) {
         }}
         ListFooterComponent={<View style={{ height: 24 }} />}
       />
+    </SafeAreaView>
+  );
+}
+
+/* ======================= TopBar reutilizable ======================= */
+
+function TopBar({
+  email,
+  onMenu,
+  onLogout,
+}: {
+  email?: string;
+  onMenu: () => void;
+  onLogout: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const isSmall = width < 400;
+  const isVerySmall = width < 340;
+
+  return (
+    <View
+      style={{
+        height: 60,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 18,
+        backgroundColor: "#020617",
+        borderBottomWidth: 1,
+        borderColor: lokalyTheme.border,
+        ...(Platform.OS === "web"
+          ? { position: "sticky", top: 0, zIndex: 100 }
+          : {}),
+      }}
+    >
+      {/* IZQ: Logo / nombre */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <View
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 10,
+            backgroundColor: lokalyTheme.primarySoft,
+            borderWidth: 1,
+            borderColor: lokalyTheme.primary,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
+        </View>
+        {!isVerySmall && (
+          <View>
+            <Text
+              style={{
+                fontSize: 17,
+                fontWeight: "800",
+                color: lokalyTheme.primary,
+                letterSpacing: 0.4,
+              }}
+            >
+              S. Admin
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                color: lokalyTheme.textMuted,
+              }}
+            >
+              Panel de operaciones
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={{ flex: 1 }} />
+
+      {/* DER: email + botones */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        {!isVerySmall && !!email && (
+          <View
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              backgroundColor: lokalyTheme.chipBg,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: lokalyTheme.chipBorder,
+              maxWidth: isSmall ? 120 : 190,
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={{
+                fontWeight: "600",
+                color: lokalyTheme.primary,
+                fontSize: 11,
+              }}
+            >
+            </Text>
+          </View>
+        )}
+
+        <Pressable
+          onPress={onMenu}
+          style={{
+            paddingHorizontal: isSmall ? 10 : 14,
+            paddingVertical: 7,
+            backgroundColor: lokalyTheme.surface,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: lokalyTheme.borderSoft,
+          }}
+        >
+          <Text
+            style={{
+              fontWeight: "700",
+              color: lokalyTheme.primary,
+              fontSize: isSmall ? 11 : 12,
+            }}
+          >
+            {isSmall ? "MENÚ" : "MENÚ PRINCIPAL"}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onLogout}
+          style={{
+            paddingHorizontal: isSmall ? 10 : 14,
+            paddingVertical: 7,
+            borderRadius: 999,
+            backgroundColor: "#B91C1C",
+          }}
+        >
+          <Text
+            style={{
+              color: "#F9FAFB",
+              fontWeight: "700",
+              fontSize: isSmall ? 11 : 12,
+            }}
+          >
+            SALIR
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

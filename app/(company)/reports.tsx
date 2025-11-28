@@ -7,13 +7,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
-  useWindowDimensions,
+  useWindowDimensions
 } from "react-native";
 import {
   VictoryArea,
@@ -25,6 +26,7 @@ import {
   VictoryPie,
   VictoryTheme,
 } from "victory-native";
+const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* ====================== Tipos esperados del backend ====================== */
 type ReportRes = {
@@ -365,15 +367,15 @@ export default function ReportsCompany() {
               justifyContent: "center",
             }}
           >
-            <Text
-              style={{
-                color: ui.primary,
-                fontWeight: "800",
-                fontSize: 15,
-              }}
-            >
-              C
-            </Text>
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
           </View>
           <View>
             <Text

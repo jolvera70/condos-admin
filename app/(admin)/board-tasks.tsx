@@ -6,15 +6,37 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   Pressable,
   Text,
   TextInput,
   View,
-  useWindowDimensions,
+  useWindowDimensions
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { apiAuth } from "../../lib/api";
 import { useApp } from "../../lib/store";
+const condosLogo = require("../../assets/images/iconCondos.png");
+
+/* ======================= Theme estilo Lokaly ======================= */
+
+const lokalyTheme = {
+  bg: "#050509",
+  bgAlt: "#080812",
+  surface: "#101018",
+  surfaceSoft: "#171725",
+  border: "#262637",
+  borderSoft: "#202033",
+  primary: "#F4C15D",
+  primarySoft: "rgba(244, 193, 93, 0.14)",
+  danger: "#F87171",
+  text: "#F9FAFB",
+  textMuted: "#9CA3AF",
+  textSubtle: "#6B7280",
+  chipBg: "#111827",
+  chipBorder: "#1F2937",
+};
 
 type TaskStatus = "OPEN" | "IN_PROGRESS" | "DONE" | "ARCHIVED" | string;
 type Task = {
@@ -146,186 +168,210 @@ export default function BoardTasks() {
   };
 
   /* ------------------------ helpers UI / estilos ------------------------ */
+
   const card: any = {
     borderWidth: 1,
-    borderColor: "#EAEAEA",
+    borderColor: lokalyTheme.borderSoft,
     borderRadius: 16,
-    backgroundColor: "#fff",
+    backgroundColor: lokalyTheme.surface,
     padding: 14,
     ...(Platform.OS === "web"
-      ? { boxShadow: "0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10)" }
+      ? {
+          boxShadow: "0 18px 45px rgba(0,0,0,0.65)",
+        }
       : {}),
   };
+
   const input = {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: lokalyTheme.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "web" ? 10 : 12,
+    backgroundColor: lokalyTheme.bgAlt,
+    color: lokalyTheme.text,
+    fontSize: 13,
   } as const;
 
-/* ============ Selector de Asignado ============ */
-const AssigneeSelector = () => {
-  // 1) WEB: <select>
-  if (Platform.OS === "web") {
-    return (
-      <select
-        value={assigneeId}
-        onChange={(e) => setAssigneeId(e.currentTarget.value)}
-        style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any, minWidth: 220 }}
-      >
-        <option value="">— sin asignar —</option>
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
+  /* ============ Selector de Asignado ============ */
+  const AssigneeSelector = () => {
+    // 1) WEB: <select>
+    if (Platform.OS === "web") {
+      return (
+        <select
+          value={assigneeId}
+          onChange={(e) => setAssigneeId(e.currentTarget.value)}
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #4B5563",
+            minWidth: 220,
+            backgroundColor: "#020617",
+            color: "#E5E7EB",
+          }}
+        >
+          <option value="">— sin asignar —</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
 
-  // 2) ANDROID: Picker en modo dropdown (no ocupa espacio al abrir)
-  if (Platform.OS === "android") {
+    // 2) ANDROID: Picker
+    if (Platform.OS === "android") {
+      return (
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: lokalyTheme.border,
+            borderRadius: 10,
+            minHeight: 44,
+            justifyContent: "center",
+            backgroundColor: lokalyTheme.bgAlt,
+          }}
+        >
+          <Picker
+            selectedValue={assigneeId}
+            onValueChange={(v) => setAssigneeId(String(v))}
+            mode="dropdown"
+            style={{ height: 44, color: lokalyTheme.text }}
+            dropdownIconColor={lokalyTheme.text}
+          >
+            <Picker.Item label="— sin asignar —" value="" />
+            {users.map((u) => (
+              <Picker.Item key={u.id} label={u.label} value={u.id} />
+            ))}
+          </Picker>
+        </View>
+      );
+    }
+
+    // 3) iOS: ActionSheet
+    const options = ["— sin asignar —", ...users.map((u) => u.label), "Cancelar"];
+    const cancelButtonIndex = options.length - 1;
+
+    const currentLabel =
+      assigneeId
+        ? users.find((u) => u.id === assigneeId)?.label ?? assigneeId
+        : "— sin asignar —";
+
+    const openSheet = () => {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: "Asignar a…",
+          options,
+          cancelButtonIndex,
+          userInterfaceStyle: "dark",
+        },
+        (idx) => {
+          if (idx === cancelButtonIndex) return;
+          if (idx === 0) {
+            setAssigneeId("");
+          } else {
+            const selectedUser = users[idx - 1];
+            if (selectedUser) setAssigneeId(selectedUser.id);
+          }
+        }
+      );
+    };
+
     return (
-      <View
-        style={{
+      <Pressable
+        onPress={openSheet}
+        style={({ pressed }) => ({
           borderWidth: 1,
-          borderColor: "#E5E7EB",
+          borderColor: lokalyTheme.border,
           borderRadius: 10,
           minHeight: 44,
+          backgroundColor: pressed ? lokalyTheme.surfaceSoft : lokalyTheme.bgAlt,
           justifyContent: "center",
-          backgroundColor: "#fff",
-          elevation: 2,
-        }}
+          paddingHorizontal: 12,
+        })}
       >
-        <Picker
-          selectedValue={assigneeId}
-          onValueChange={(v) => setAssigneeId(String(v))}
-          mode="dropdown"
-          style={{ height: 44 }}
-          itemStyle={{ fontSize: 14 }}
+        <Text
+          style={{ fontWeight: "700", color: lokalyTheme.text }}
+          numberOfLines={1}
         >
-          <Picker.Item label="— sin asignar —" value="" />
-          {users.map((u) => (
-            <Picker.Item key={u.id} label={u.label} value={u.id} />
-          ))}
-        </Picker>
-      </View>
-    );
-  }
-
-  // 3) iOS/iPad: ActionSheet (no rompe el layout)
-  const options = ["— sin asignar —", ...users.map((u) => u.label), "Cancelar"];
-  const cancelButtonIndex = options.length - 1;
-
-  const currentLabel =
-    assigneeId ? users.find((u) => u.id === assigneeId)?.label ?? assigneeId : "— sin asignar —";
-
-  const openSheet = () => {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title: "Asignar a…",
-        options,
-        cancelButtonIndex,
-        userInterfaceStyle: "light",
-      },
-      (idx) => {
-        if (idx === cancelButtonIndex) return;
-        if (idx === 0) {
-          setAssigneeId("");
-        } else {
-          const selectedUser = users[idx - 1];
-          if (selectedUser) setAssigneeId(selectedUser.id);
-        }
-      }
+          {currentLabel}
+        </Text>
+        <Text
+          style={{
+            position: "absolute",
+            right: 12,
+            color: lokalyTheme.textMuted,
+          }}
+        >
+          ▼
+        </Text>
+      </Pressable>
     );
   };
 
-  return (
-    <Pressable
-      onPress={openSheet}
-      style={({ pressed }) => ({
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
-        borderRadius: 10,
-        minHeight: 44,
-        backgroundColor: pressed ? "#F8FAFC" : "#fff",
-        justifyContent: "center",
-        paddingHorizontal: 12,
-      })}
-    >
-      <Text style={{ fontWeight: "700", color: "#111827" }} numberOfLines={1}>
-        {currentLabel}
-      </Text>
-      <Text style={{ position: "absolute", right: 12, color: "#94A3B8" }}>▼</Text>
-    </Pressable>
-  );
-};
-
   /* ------------------------ Render ------------------------ */
   return (
-    <View style={{ flex: 1, backgroundColor: "#FAFAFB" }}>
-      {/* --- TOP BAR --- */}
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: lokalyTheme.bg,
+      }}
+    >
+      {/* TOP BAR uniforme */}
+      <TopBar
+        email={me?.email}
+        onMenu={() => router.replace("/(app)/home")}
+        onLogout={logout}
+      />
+
+      {/* HEADER de la página */}
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderColor: "#ECECEC",
-          backgroundColor: "#FFFFFF",
+          height: 64,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
+          paddingHorizontal: 18,
+          borderBottomWidth: 1,
+          borderColor: lokalyTheme.borderSoft,
+          backgroundColor: lokalyTheme.bgAlt,
         }}
       >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>Condos Admin</Text>
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          {!!me?.email && (
-            <Text
-              style={{
-                color: "#475569",
-                backgroundColor: "#F1F5F9",
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: "700",
-              }}
-            >
-              {me.email}
-            </Text>
-          )}
-          <PillButton label="SALIR" tone="danger" onPress={logout} />
+        <View>
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "700",
+              color: lokalyTheme.primary,
+            }}
+          >
+            Tareas del condominio
+          </Text>
+          <Text
+            style={{
+              fontSize: 12,
+              color: lokalyTheme.textMuted,
+              marginTop: 2,
+            }}
+          >
+            {boardName
+              ? `Board: ${boardName}`
+              : `Board ID: ${boardId}`}
+          </Text>
         </View>
+
+        <PillButton
+          label="VOLVER"
+          tone="secondary"
+          onPress={() => router.back()}
+        />
       </View>
 
-      {/* --- SUB HEADER --- */}
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          borderBottomWidth: 1,
-          borderColor: "#ECECEC",
-          backgroundColor: "#F9FAFB",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <Text style={{ fontSize: 18, fontWeight: "800" }}>
-          Tareas · {boardName || boardId}
-        </Text>
-        <PillButton label="VOLVER" onPress={() => router.back()} />
-      </View>
-
-      {/* --- SCROLL PRINCIPAL --- */}
+      {/* LISTA PRINCIPAL */}
       <FlatList
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16 }}
+        style={{ flex: 1, backgroundColor: lokalyTheme.bg }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
         keyboardShouldPersistTaps="handled"
         data={tasks}
         keyExtractor={(t) => t.id}
@@ -340,38 +386,65 @@ const AssigneeSelector = () => {
                 style={{
                   padding: 10,
                   borderRadius: 12,
-                  backgroundColor: msg.includes("✅") ? "#F1F5FF" : "#FEF2F2",
+                  backgroundColor: msg.includes("✅")
+                    ? "rgba(22,163,74,0.12)"
+                    : "rgba(248,113,113,0.10)",
                   borderWidth: 1,
-                  borderColor: msg.includes("✅") ? "#DBEAFE" : "#FECACA",
+                  borderColor: msg.includes("✅")
+                    ? "rgba(34,197,94,0.6)"
+                    : "rgba(248,113,113,0.65)",
                 }}
               >
-                <Text style={{ color: msg.includes("✅") ? "#1E40AF" : "#B91C1C" }}>{msg}</Text>
+                <Text
+                  style={{
+                    color: msg.includes("✅")
+                      ? "#4ADE80"
+                      : lokalyTheme.danger,
+                    fontSize: 12,
+                  }}
+                >
+                  {msg}
+                </Text>
               </View>
             )}
 
-            {/* Toggle crear tarea */}
+            {/* Crear tarea */}
             <View style={{ ...card, gap: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={{ fontWeight: "800" }}>Nueva tarea</Text>
-                <View style={{ marginLeft: "auto" }}>
-                  <PillButton
-                    label={showCreate ? "OCULTAR" : "CREAR TAREA"}
-                    tone={showCreate ? "secondary" : "primary"}
-                    onPress={() => setShowCreate((v) => !v)}
-                  />
-                </View>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text
+                  style={{
+                    fontWeight: "800",
+                    color: lokalyTheme.text,
+                  }}
+                >
+                  Nueva tarea
+                </Text>
+                <PillButton
+                  label={showCreate ? "OCULTAR" : "CREAR TAREA"}
+                  tone={showCreate ? "secondary" : "primary"}
+                  onPress={() => setShowCreate((v) => !v)}
+                />
               </View>
 
               {showCreate && (
                 <View style={{ gap: 8 }}>
                   <TextInput
                     placeholder="Título"
+                    placeholderTextColor={lokalyTheme.textMuted}
                     value={title}
                     onChangeText={setTitle}
                     style={input}
                   />
                   <TextInput
                     placeholder="Descripción (opcional)"
+                    placeholderTextColor={lokalyTheme.textMuted}
                     value={description}
                     onChangeText={setDescription}
                     style={input}
@@ -381,32 +454,69 @@ const AssigneeSelector = () => {
                     <input
                       type="date"
                       value={dueDate}
-                      onChange={(e) => setDueDate(e.currentTarget.value)}
-                      style={{ padding: 10, borderRadius: 10, border: "1px solid #E5E7EB" as any }}
+                      onChange={(e) =>
+                        setDueDate(e.currentTarget.value)
+                      }
+                      style={{
+                        padding: 10,
+                        borderRadius: 10,
+                        border: "1px solid #4B5563",
+                        backgroundColor: "#020617",
+                        color: "#E5E7EB",
+                      }}
                     />
                   ) : (
                     <TextInput
                       placeholder="yyyy-MM-dd"
+                      placeholderTextColor={lokalyTheme.textMuted}
                       value={dueDate}
                       onChangeText={setDueDate}
                       style={input}
                     />
                   )}
-                  <PillButton label="CREAR" onPress={createTask} disabled={!title.trim()} />
+                  <PillButton
+                    label="CREAR"
+                    onPress={createTask}
+                    disabled={!title.trim()}
+                  />
                 </View>
               )}
             </View>
 
             {/* Encabezado listado */}
-            <View style={{ ...card, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ fontWeight: "800" }}>Tareas</Text>
-              {loading && <ActivityIndicator />}
+            <View
+              style={{
+                ...card,
+                padding: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: "800",
+                  color: lokalyTheme.text,
+                }}
+              >
+                Tareas ({tasks.length})
+              </Text>
+              {loading && (
+                <ActivityIndicator color={lokalyTheme.primary} />
+              )}
             </View>
           </View>
         }
         ListEmptyComponent={
-          <Text style={{ color: "#777", padding: 12 }}>
-            {loading ? "Cargando..." : "No hay tareas para este board."}
+          <Text
+            style={{
+              color: lokalyTheme.textMuted,
+              padding: 12,
+            }}
+          >
+            {loading
+              ? "Cargando..."
+              : "No hay tareas para este board."}
           </Text>
         }
         renderItem={({ item: t }) => (
@@ -414,33 +524,79 @@ const AssigneeSelector = () => {
             style={{
               padding: 12,
               borderWidth: 1,
-              borderColor: "#F3F4F6",
-              borderRadius: 12,
-              backgroundColor: "#fff",
+              borderColor: lokalyTheme.borderSoft,
+              borderRadius: 16,
+              backgroundColor: lokalyTheme.surface,
               marginTop: 8,
               gap: 6,
               ...(Platform.OS === "web"
-                ? { boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 1px 2px rgba(16,24,40,.06)" }
+                ? {
+                    boxShadow:
+                      "0 16px 40px rgba(15,23,42,0.8)",
+                  }
                 : {}),
               flexBasis: twoCols ? "48%" : "100%",
               maxWidth: twoCols ? "48%" : "100%",
+              borderLeftWidth: 6,
+              borderLeftColor: statusStripeColor(t.status),
             }}
           >
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontWeight: "800", fontSize: 16 }}>{t.title}</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: "800",
+                  fontSize: 16,
+                  color: lokalyTheme.text,
+                }}
+              >
+                {t.title}
+              </Text>
               <StatusBadge status={t.status} />
             </View>
 
-            {!!t.description && <Text>{t.description}</Text>}
+            {!!t.description && (
+              <Text
+                style={{
+                  color: lokalyTheme.text,
+                  fontSize: 13,
+                }}
+              >
+                {t.description}
+              </Text>
+            )}
 
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 4,
+              }}
+            >
               {t.assigneeId && (
-                <Chip label={`Asignado: ${userNameById[t.assigneeId] ?? t.assigneeId}`} />
+                <Chip
+                  label={`Asignado: ${
+                    userNameById[t.assigneeId] ?? t.assigneeId
+                  }`}
+                />
               )}
-              {t.dueDate && <Chip label={`Vence: ${t.dueDate}`} tone="warning" />}
+              {t.dueDate && (
+                <Chip
+                  label={`Vence: ${t.dueDate}`}
+                  tone="warning"
+                />
+              )}
               {!!t.createdAt && (
                 <Chip
-                  label={`Creada: ${new Date(t.createdAt).toLocaleString()}`}
+                  label={`Creada: ${new Date(
+                    t.createdAt
+                  ).toLocaleString()}`}
                   tone="secondary"
                 />
               )}
@@ -449,11 +605,12 @@ const AssigneeSelector = () => {
         )}
         ListFooterComponent={<View style={{ height: 24 }} />}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 /* --------- UI helpers --------- */
+
 function PillButton({
   label,
   onPress,
@@ -466,10 +623,10 @@ function PillButton({
   tone?: "primary" | "secondary" | "warning" | "danger";
 }) {
   const palette = {
-    primary: { bg: "#2563EB", bg2: "#1D4ED8", fg: "#fff" },
-    secondary: { bg: "#F1F5F9", bg2: "#E2E8F0", fg: "#0F172A" },
-    warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#fff" },
-    danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#fff" },
+    primary: { bg: lokalyTheme.primary, bg2: "#E0A93F", fg: "#111827" },
+    secondary: { bg: "#111827", bg2: "#020617", fg: "#E5E7EB" },
+    warning: { bg: "#F59E0B", bg2: "#D97706", fg: "#111827" },
+    danger: { bg: "#EF4444", bg2: "#DC2626", fg: "#F9FAFB" },
   }[tone];
 
   return (
@@ -480,31 +637,94 @@ function PillButton({
         paddingHorizontal: 14,
         paddingVertical: 10,
         borderRadius: 999,
-        backgroundColor: disabled ? "#CBD5E1" : pressed ? palette.bg2 : palette.bg,
+        backgroundColor: disabled
+          ? "rgba(148,163,184,0.45)"
+          : pressed
+          ? palette.bg2
+          : palette.bg,
       })}
     >
-      <Text style={{ color: palette.fg, fontWeight: "800" }}>{label.toUpperCase()}</Text>
+      <Text
+        style={{
+          color: palette.fg,
+          fontWeight: "800",
+          fontSize: 11,
+          letterSpacing: 0.7,
+        }}
+      >
+        {label.toUpperCase()}
+      </Text>
     </Pressable>
   );
+}
+
+function statusStripeColor(status?: TaskStatus) {
+  const key = String(status || "OPEN").toUpperCase();
+  switch (key) {
+    case "OPEN":
+      return "#3B82F6";
+    case "IN_PROGRESS":
+      return "#F59E0B";
+    case "DONE":
+      return "#10B981";
+    case "ARCHIVED":
+      return "#6B7280";
+    default:
+      return lokalyTheme.borderSoft;
+  }
 }
 
 function StatusBadge({ status }: { status?: TaskStatus }) {
   const key = String(status || "OPEN").toUpperCase();
 
-  const palette: Record<string, { bg: string; fg: string }> = {
-    OPEN:        { bg: "#EFF6FF", fg: "#1D4ED8" },
-    IN_PROGRESS: { bg: "#FEF3C7", fg: "#92400E" },
-    DONE:        { bg: "#E6FFED", fg: "#136F3A" },
-    ARCHIVED:    { bg: "#F1F5F9", fg: "#475569" },
-    DEFAULT:     { bg: "#F1F5F9", fg: "#0F172A" },
+  const palette: Record<string, { bg: string; fg: string; label: string }> = {
+    OPEN: {
+      bg: "rgba(59,130,246,0.18)",
+      fg: "#93C5FD",
+      label: "ABIERTA",
+    },
+    IN_PROGRESS: {
+      bg: "rgba(245,158,11,0.18)",
+      fg: "#FACC15",
+      label: "EN PROGRESO",
+    },
+    DONE: {
+      bg: "rgba(16,185,129,0.18)",
+      fg: "#6EE7B7",
+      label: "COMPLETADA",
+    },
+    ARCHIVED: {
+      bg: "#1E293B",
+      fg: "#CBD5F5",
+      label: "ARCHIVADA",
+    },
+    DEFAULT: {
+      bg: "#1F2933",
+      fg: "#E5E7EB",
+      label: key,
+    },
   };
 
-  const { bg, fg } = palette[key] ?? palette.DEFAULT;
+  const p = palette[key] ?? palette.DEFAULT;
 
   return (
-    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: bg }}>
-      <Text style={{ color: fg, fontWeight: "800", fontSize: 12 }}>
-        {key.replaceAll("_", " ")}
+    <View
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: p.bg,
+      }}
+    >
+      <Text
+        style={{
+          color: p.fg,
+          fontWeight: "800",
+          fontSize: 11,
+          letterSpacing: 0.7,
+        }}
+      >
+        {p.label}
       </Text>
     </View>
   );
@@ -518,10 +738,20 @@ function Chip({
   tone?: "primary" | "secondary" | "warning";
 }) {
   const palette = {
-    primary: { bg: "#EEF2FF", fg: "#3730A3" },
-    secondary: { bg: "#F1F5F9", fg: "#0F172A" },
-    warning: { bg: "#FFFBEB", fg: "#92400E" },
+    primary: {
+      bg: "rgba(59,130,246,0.18)",
+      fg: "#93C5FD",
+    },
+    secondary: {
+      bg: lokalyTheme.chipBg,
+      fg: lokalyTheme.text,
+    },
+    warning: {
+      bg: "rgba(245,158,11,0.18)",
+      fg: "#FACC15",
+    },
   }[tone];
+
   return (
     <View
       style={{
@@ -531,7 +761,181 @@ function Chip({
         backgroundColor: palette.bg,
       }}
     >
-      <Text style={{ color: palette.fg, fontWeight: "700" }}>{label}</Text>
+      <Text
+        style={{
+          color: palette.fg,
+          fontWeight: "700",
+          fontSize: 11,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/* ======================= TopBar reutilizable ======================= */
+
+function TopBar({
+  email,
+  onMenu,
+  onLogout,
+}: {
+  email?: string;
+  onMenu: () => void;
+  onLogout: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const isSmall = width < 400;
+  const isVerySmall = width < 340;
+
+  return (
+    <View
+      style={{
+        height: 60,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 18,
+        backgroundColor: "#020617",
+        borderBottomWidth: 1,
+        borderColor: lokalyTheme.border,
+        ...(Platform.OS === "web"
+          ? { position: "sticky", top: 0, zIndex: 100 }
+          : {}),
+      }}
+    >
+      {/* IZQ: Logo / nombre */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <View
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 10,
+            backgroundColor: lokalyTheme.primarySoft,
+            borderWidth: 1,
+            borderColor: lokalyTheme.primary,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
+        </View>
+        {!isVerySmall && (
+          <View>
+            <Text
+              style={{
+                fontSize: 17,
+                fontWeight: "800",
+                color: lokalyTheme.primary,
+                letterSpacing: 0.4,
+              }}
+            >
+              S. Admin
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                color: lokalyTheme.textMuted,
+              }}
+            >
+              Panel de operaciones
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={{ flex: 1 }} />
+
+      {/* DER: email + botones */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        {!isVerySmall && !!email && (
+          <View
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              backgroundColor: lokalyTheme.chipBg,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: lokalyTheme.chipBorder,
+              maxWidth: isSmall ? 120 : 190,
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={{
+                fontWeight: "600",
+                color: lokalyTheme.primary,
+                fontSize: 11,
+              }}
+            >
+             
+            </Text>
+          </View>
+        )}
+
+        <Pressable
+          onPress={onMenu}
+          style={{
+            paddingHorizontal: isSmall ? 10 : 14,
+            paddingVertical: 7,
+            backgroundColor: lokalyTheme.surface,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: lokalyTheme.borderSoft,
+          }}
+        >
+          <Text
+            style={{
+              fontWeight: "700",
+              color: lokalyTheme.primary,
+              fontSize: isSmall ? 11 : 12,
+            }}
+          >
+            {isSmall ? "MENÚ" : "MENÚ PRINCIPAL"}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onLogout}
+          style={{
+            paddingHorizontal: isSmall ? 10 : 14,
+            paddingVertical: 7,
+            borderRadius: 999,
+            backgroundColor: "#B91C1C",
+          }}
+        >
+          <Text
+            style={{
+              color: "#F9FAFB",
+              fontWeight: "700",
+              fontSize: isSmall ? 11 : 12,
+            }}
+          >
+            SALIR
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

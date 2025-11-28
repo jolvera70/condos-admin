@@ -7,15 +7,17 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   Pressable,
   Text,
   TextInput,
   View,
-  useWindowDimensions,
+  useWindowDimensions
 } from "react-native";
 import { apiAuth } from "../../lib/api";
 import { useApp } from "../../lib/store";
+const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* =============== Tema Lokaly / Condos =============== */
 const ui = {
@@ -606,15 +608,15 @@ export default function BoardTasks() {
               justifyContent: "center",
             }}
           >
-            <Text
-              style={{
-                color: ui.primary,
-                fontWeight: "800",
-                fontSize: 15,
-              }}
-            >
-              C
-            </Text>
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
           </View>
           <View>
             <Text

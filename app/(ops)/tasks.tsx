@@ -27,6 +27,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* ======================= Theme estilo Lokaly ======================= */
 
@@ -1448,9 +1449,9 @@ function StatusFilter({
           paddingHorizontal: 14,
           borderRadius: 999,
           borderWidth: 1,
-          borderColor: lokalyTheme.borderSoft,
+          borderColor: lokalyTheme.boardBorder,
           justifyContent: "center",
-          backgroundColor: lokalyTheme.surface,
+          backgroundColor: lokalyTheme.primary,
           minWidth: isMobile ? 180 : 220,
         }}
       >
@@ -1472,18 +1473,18 @@ function StatusFilter({
       style={{
         borderWidth: 1,
         borderRadius: 999,
-        borderColor: lokalyTheme.borderSoft,
+        borderColor: lokalyTheme.primary,
         height: 40,
         minWidth: isMobile ? 180 : 220,
         justifyContent: "center",
-        backgroundColor: lokalyTheme.surface,
+        backgroundColor: lokalyTheme.boardBorder,
       }}
     >
       <Picker
         selectedValue={value}
         onValueChange={(v) => onChange(v as any)}
         mode={isMobile ? "dialog" : "dropdown"}
-        style={{ height: "100%", width: "100%", color: lokalyTheme.boardText }}
+        style={{ height: "100%", width: "100%", color: lokalyTheme.primary }}
         dropdownIconColor="#E5E7EB"
         prompt="Filtrar por estado"
       >
@@ -2049,7 +2050,316 @@ if (Platform.OS === "web") {
                   borderColor: lokalyTheme.boardBg,
                 }}
               >
-                {/* ... mismo contenido de columna que en la rama web ... */}
+  {/* Header columna */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 8,
+                          height: 24,
+                          borderRadius: 999,
+                          backgroundColor: style.fg,
+                        }}
+                      />
+                      <View>
+                        <Text
+                          style={{
+                            fontWeight: "700",
+                            fontSize: 15,
+                            color: lokalyTheme.boardText,
+                          }}
+                        >
+                          {style.title}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: lokalyTheme.boardTextMuted,
+                            marginTop: 2,
+                          }}
+                        >
+                          {list.length} tarea
+                          {list.length === 1 ? "" : "s"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Lista de tarjetas */}
+                  <View
+                    style={{
+                      paddingBottom: 60,
+                      gap: 10,
+                    }}
+                  >
+                    {list.map((t: Task) => (
+                      <View
+                        key={t.id}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: lokalyTheme.boardBorder,
+                          borderRadius: 14,
+                          backgroundColor: lokalyTheme.boardBorder,
+                          padding: 10,
+                          gap: 8,
+                          ...cardShadow,
+                        }}
+                      >
+                        {/* Título + prioridad */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 8,
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontWeight: "700",
+                                fontSize: 15,
+                                color: lokalyTheme.boardText,
+                              }}
+                              numberOfLines={2}
+                            >
+                              {t.title}
+                            </Text>
+                            {!!t.description && (
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  color: lokalyTheme.boardTextMuted,
+                                  marginTop: 2,
+                                }}
+                                numberOfLines={2}
+                              >
+                                {t.description}
+                              </Text>
+                            )}
+                          </View>
+
+                          <View
+                            style={{
+                              alignItems: "flex-end",
+                              gap: 4,
+                            }}
+                          >
+                            {!!t.priority && (
+                              <View
+                                style={{
+                                  borderRadius: 999,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 3,
+                                  backgroundColor:
+                                    t.priority === "HIGH"
+                                      ? "rgba(248,113,113,0.16)"
+                                      : t.priority === "MEDIUM"
+                                      ? "rgba(250,204,21,0.12)"
+                                      : "rgba(45,212,191,0.12)",
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: "600",
+                                    color:
+                                      t.priority === "HIGH"
+                                        ? "#F87171"
+                                        : t.priority === "MEDIUM"
+                                        ? "#EAB308"
+                                        : "#2DD4BF",
+                                  }}
+                                >
+                                  {t.priority}
+                                </Text>
+                              </View>
+                            )}
+                            {!!t.boardName && (
+                              <Text
+                                style={{
+                                  fontSize: 10,
+                                  color: lokalyTheme.boardTextMuted,
+                                }}
+                              >
+                                {t.boardName}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        {/* Meta info */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginTop: 4,
+                            marginBottom: 2,
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: 999,
+                                backgroundColor: lokalyTheme.chipBg,
+                                borderWidth: 1,
+                                borderColor: lokalyTheme.chipBorder,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: lokalyTheme.primary,
+                                  fontSize: 11,
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {(displayAssignee(t.assigneeId) || "?")
+                                  .substring(0, 2)
+                                  .toUpperCase()}
+                              </Text>
+                            </View>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                color: lokalyTheme.boardTextMuted,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {displayAssignee(t.assigneeId)}
+                            </Text>
+                          </View>
+
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: lokalyTheme.boardTextMuted,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {fmt(t.dueDate)}
+                          </Text>
+                        </View>
+
+                        {/* Adjuntos */}
+                        <TaskAttachments
+                          boardId={t.boardId}
+                          taskId={t.id}
+                          attachments={attachmentsByTask[t.id] ?? []}
+                          refetchTaskAttachments={refetchTaskAttachments}
+                          addAttachment={addAttachment}
+                        />
+
+                        {/* Comentarios */}
+                        <CommentList
+                          boardId={t.boardId}
+                          taskId={t.id}
+                          comments={commentsByTask[t.id] ?? []}
+                          refetchComments={refetchComments}
+                        />
+
+                        {/* Botones de cambio de estado */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            flexWrap: "wrap" as const,
+                            gap: 6,
+                            marginTop: 8,
+                          }}
+                        >
+                          {(["OPEN", "IN_PROGRESS", "DONE"] as const)
+                            .filter((s) => s !== t.status)
+                            .map((s) => (
+                              <Pressable
+                                key={s}
+                                onPress={() => updateStatus(t.id, s)}
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  backgroundColor:
+                                    s === "DONE"
+                                      ? "rgba(16,185,129,0.13)"
+                                      : s === "IN_PROGRESS"
+                                      ? lokalyTheme.primarySoft
+                                      : "#0B1120",
+                                  borderRadius: 999,
+                                  paddingVertical: 5,
+                                  paddingHorizontal: 10,
+                                  borderWidth: 1,
+                                  borderColor:
+                                    s === "DONE"
+                                      ? "rgba(34,197,94,0.6)"
+                                      : s === "IN_PROGRESS"
+                                      ? lokalyTheme.primary
+                                      : lokalyTheme.borderSoft,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: "600",
+                                    color:
+                                      s === "DONE"
+                                        ? "#4ADE80"
+                                        : s === "IN_PROGRESS"
+                                        ? lokalyTheme.primary
+                                        : "#E5E7EB",
+                                  }}
+                                >
+                                  {s}
+                                </Text>
+                              </Pressable>
+                            ))}
+                        </View>
+                      </View>
+                    ))}
+
+                    {list.length === 0 && (
+                      <View
+                        style={{
+                          padding: 12,
+                          borderRadius: 12,
+                          backgroundColor: "#020617",
+                          borderWidth: 1,
+                          borderColor: lokalyTheme.borderSoft,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: lokalyTheme.boardTextMuted,
+                            textAlign: "center",
+                          }}
+                        >
+                          No hay tareas en esta columna.
+                        </Text>
+                      </View>
+                    )}
+                  </View>                
               </View>
             );
           }
@@ -2070,6 +2380,9 @@ function TopBar({
   onMenu: () => void;
   onLogout: () => void;
 }) {
+  const { width } = useWindowDimensions();
+  const isSmall = width < 400;      // teléfonos chicos
+  const isVerySmall = width < 340;  // casos extremos
   return (
     <View
       style={{
@@ -2099,36 +2412,48 @@ function TopBar({
             justifyContent: "center",
           }}
         >
-          <Text
-            style={{
-              color: lokalyTheme.primary,
-              fontWeight: "800",
-              fontSize: 15,
-            }}
-          >
-            C
-          </Text>
+<View
+  style={{
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: lokalyTheme.primary,
+    backgroundColor: lokalyTheme.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  <Image
+    source={condosLogo}
+    style={{ width: "100%", height: "100%" }}
+    resizeMode="contain"
+  />
+</View>
         </View>
-        <View>
-          <Text
-            style={{
-              fontSize: 17,
-              fontWeight: "800",
-              color: lokalyTheme.primary,
-              letterSpacing: 0.4,
-            }}
-          >
-            Condos Admin
-          </Text>
-          <Text
-            style={{
-              fontSize: 11,
-              color: lokalyTheme.boardTextMuted,
-            }}
-          >
-            Panel de operaciones
-          </Text>
-        </View>
+        {!isVerySmall && (
+          <View>
+            <Text
+              style={{
+                fontSize: 17,
+                fontWeight: "800",
+                color: lokalyTheme.primary,
+                letterSpacing: 0.4,
+              }}
+            >
+              Condos Admin
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                color: lokalyTheme.boardTextMuted,
+              }}
+            >
+              Panel de operaciones
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={{ flex: 1 }} />
@@ -2141,22 +2466,25 @@ function TopBar({
           gap: 8,
         }}
       >
-        {!!email && (
+        {!isVerySmall && !!email && (
           <View
             style={{
-              paddingHorizontal: 12,
-              paddingVertical: 6,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
               backgroundColor: lokalyTheme.chipBg,
               borderRadius: 999,
               borderWidth: 1,
               borderColor: lokalyTheme.chipBorder,
+              maxWidth: isSmall ? 120 : 190,
             }}
           >
             <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
               style={{
                 fontWeight: "600",
                 color: lokalyTheme.primary,
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               {email}
@@ -2182,7 +2510,7 @@ function TopBar({
               fontSize: 12,
             }}
           >
-            MENÚ PRINCIPAL
+            {isSmall ? "MENÚ" : "MENÚ PRINCIPAL"}
           </Text>
         </Pressable>
 

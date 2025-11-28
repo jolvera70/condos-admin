@@ -2,9 +2,9 @@
   "expo": {
     "name": "condos-admin",
     "slug": "condos-admin",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/iconCondos.png",
     "scheme": "condosadmin",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,6 +14,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "buildNumber": "2",
       "supportsTablet": true,
       "bundleIdentifier": "com.jolvera70.condosadmin",
       "infoPlist": {

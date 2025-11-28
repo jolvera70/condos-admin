@@ -6,13 +6,14 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
   Text,
   TextInput,
   View,
-  useWindowDimensions,
+  useWindowDimensions
 } from "react-native";
 import { apiAuth } from "../../lib/api";
 import {
@@ -21,6 +22,7 @@ import {
   highestRoleInOrg,
 } from "../../lib/rbac";
 import { useApp } from "../../lib/store";
+const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* ================== Tema Condos / Lokaly ================== */
 const ui = {
@@ -716,15 +718,15 @@ export default function UsersCompany() {
                   justifyContent: "center",
                 }}
               >
-                <Text
-                  style={{
-                    color: ui.primary,
-                    fontWeight: "800",
-                    fontSize: 15,
-                  }}
-                >
-                  C
-                </Text>
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
               </View>
               <View>
                 <Text

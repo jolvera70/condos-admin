@@ -2,16 +2,18 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Keyboard,
   Platform,
   Pressable,
   Text,
   TextInput,
-  View,
+  View
 } from "react-native";
 import { apiAuth, login } from "../../lib/api";
 import { AuthStorage } from "../../lib/auth";
 import { useApp } from "../../lib/store";
+const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* ============ Theme minimal para login ============ */
 const ui = {
@@ -171,19 +173,6 @@ export default function Login() {
       {/* Glow de fondo */}
       {Platform.OS === "web" && <View style={gradientCircle} />}
 
-      {/* Branding arriba */}
-      <View style={{ alignItems: "center", marginBottom: 24 }}>
-        <Text style={headerTitle}>CONDOS</Text>
-        <Text
-          style={{
-            color: ui.colors.textMuted,
-            marginTop: 4,
-            fontSize: 13,
-          }}
-        >
-          Admin panel · Lokaly style
-        </Text>
-      </View>
 
       {/* Tarjeta login */}
       <View style={card}>
@@ -192,29 +181,25 @@ export default function Login() {
           <View
             style={{
               flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
+              alignItems: "flex-end",
             }}
           >
-            <View
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: ui.colors.primary,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ color: ui.colors.primary, fontSize: 14 }}>CA</Text>
-            </View>
+<Image
+  source={condosLogo}
+  style={{
+    width: 50,
+    height: 50,
+    alignItems: "flex-end",
+  }}
+  resizeMode="contain"
+/>
             <Text
               style={{
-                fontSize: 13,
-                color: ui.colors.textMuted,
+                fontSize: 20,
+                color: ui.colors.primary,
                 textTransform: "uppercase",
                 letterSpacing: 1.1,
+                fontWeight: "700",
               }}
             >
               Condos Admin
