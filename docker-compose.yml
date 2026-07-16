@@ -1,0 +1,17 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: condos-frontend
+    container_name: frontend
+    restart: unless-stopped
+    networks:
+      - condos-admin-net
+
+# Se une a la red que ya crea el docker-compose del backend (condos-admin-net),
+# para que Traefik pueda enrutar a http://frontend:80 por DNS interno de Docker.
+networks:
+  condos-admin-net:
+    external: true
+    name: condos-admin-net
