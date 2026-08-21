@@ -919,6 +919,45 @@ export default function BoardsAdmin() {
                         })
                       }
                     />
+                    <PillButton
+                      label="UNIDADES"
+                      onPress={() =>
+                        router.push({
+                          pathname: "../(admin)/board-units",
+                          params: {
+                            boardId: b.id,
+                            orgId: b.orgId,
+                            boardName: b.name,
+                          },
+                        })
+                      }
+                    />
+                    <PillButton
+                      label="UNIDADES"
+                      onPress={() =>
+                        router.push({
+                          pathname: "../(admin)/board-units",
+                          params: {
+                            boardId: b.id,
+                            orgId: b.orgId,
+                            boardName: b.name,
+                          },
+                        })
+                      }
+                    />
+                    <PillButton
+                      label="CUOTAS Y PAGOS"
+                      onPress={() =>
+                        router.push({
+                          pathname: "../(admin)/board-billing",
+                          params: {
+                            boardId: b.id,
+                            orgId: b.orgId,
+                            boardName: b.name,
+                          },
+                        })
+                      }
+                    />
                   </View>
                 </>
               ) : (

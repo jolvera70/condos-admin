@@ -2,44 +2,95 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Keyboard,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { apiAuth, login } from "../../lib/api";
 import { AuthStorage } from "../../lib/auth";
 import { useApp } from "../../lib/store";
-const condosLogo = require("../../assets/images/iconCondos.png");
 
-/* ============ Theme minimal para login ============ */
+/* ============ Paleta según el diseño de Figma (TOKKO CONDO) ============ */
 const ui = {
-  colors: {
-    background: "#020617", // casi negro (slate-950)
-    card: "#020617",
-    cardBorder: "#1E293B",
-    inputBg: "#020617",
-    inputBorder: "#1F2937",
-    inputBorderFocus: "#EAB308",
-    primary: "#EAB308", // gold mate
-    primarySoft: "rgba(234,179,8,0.12)",
-    text: "#E5E7EB",
-    textMuted: "#9CA3AF",
-    textSubtle: "#64748B",
-    errorBg: "rgba(248,113,113,0.10)",
-    errorText: "#FCA5A5",
-    infoBg: "rgba(56,189,248,0.12)",
-    infoText: "#7DD3FC",
-  },
-  radius: {
-    lg: 22,
-    md: 14,
-    sm: 10,
-  },
+  bgOuter: "#7B70E8", // periwinkle de fondo
+  circleDeco: "rgba(255,255,255,0.22)", // círculos decorativos de las esquinas
+  card: "#FBF1E1", // beige/crema de la tarjeta
+  cardBorder: "#15131F", // contorno oscuro grueso de la tarjeta
+  logoCircle: "#6C5DEC",
+  purple: "#5B4CE0", // "CONDO", links, checkbox, texto de Regístrate
+  yellow: "#F1E94A", // botón Entrar + acento del logo
+  yellowText: "#1F2430",
+  textGray: "#8A8A94",
+  textDark: "#2B2B33",
+  inputBg: "#FFFFFF",
+  inputPlaceholder: "#9CA3AF",
+  error: "#D64545",
+  errorBg: "rgba(214,69,69,0.08)",
+  info: "#4C5FD6",
+  infoBg: "rgba(76,95,214,0.08)",
 };
+
+/** Ícono "G" de Google a 4 colores, dibujado en SVG (no depende de ningún asset externo). */
+function GoogleIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48">
+      <Path
+        fill="#FFC107"
+        d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"
+      />
+      <Path
+        fill="#FF3D00"
+        d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6.1 29.6 4 24 4c-7.5 0-14 4.2-17.7 10.7z"
+      />
+      <Path
+        fill="#4CAF50"
+        d="M24 44c5.5 0 10.4-1.9 14.3-5.1l-6.6-5.6c-2 1.5-4.6 2.4-7.7 2.4-5.3 0-9.7-3.1-11.3-7.4l-6.5 5C9.9 39.7 16.4 44 24 44z"
+      />
+      <Path
+        fill="#1976D2"
+        d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.6 5.6C41.4 36 44 30.7 44 24c0-1.3-.1-2.7-.4-3.5z"
+      />
+    </Svg>
+  );
+}
+
+/** Badge circular del logo: "tokko" en blanco + acento amarillo, dentro de un círculo morado. */
+function TokkoBadge() {
+  return (
+    <View
+      style={{
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: ui.logoCircle,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 3,
+        borderColor: ui.cardBorder,
+      }}
+    >
+      <Svg width={20} height={14} viewBox="0 0 20 14" style={{ marginBottom: 2 }}>
+        <Path
+          d="M2 12 L10 2 L18 12"
+          stroke={ui.yellow}
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      </Svg>
+      <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 20, letterSpacing: 0.5 }}>
+        tokko
+      </Text>
+      <View style={{ width: 34, height: 2, backgroundColor: ui.yellow, marginTop: 3, borderRadius: 1 }} />
+    </View>
+  );
+}
 
 export default function Login() {
   const router = useRouter();
@@ -47,7 +98,6 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
   const [remember, setRemember] = useState(true);
 
   const [msg, setMsg] = useState("");
@@ -66,8 +116,8 @@ export default function Login() {
       setBusy(true);
       setMsg("Entrando…");
       Keyboard.dismiss();
-      const pass = password; // copia local
-      setPassword(""); // limpia el estado inmediatamente
+      const pass = password;
+      setPassword("");
       const res = await login(email.trim().toLowerCase(), pass);
       if (!res?.token) throw new Error("Respuesta sin token.");
 
@@ -93,367 +143,252 @@ export default function Login() {
     }
   }, [email, password, remember, busy, canSubmit, router, setMe, setToken]);
 
-  const card: any = {
-    width: 420,
-    maxWidth: "100%",
-    borderWidth: 1,
-    borderColor: ui.colors.cardBorder,
-    borderRadius: ui.radius.lg,
-    paddingHorizontal: 22,
-    paddingVertical: 24,
-    backgroundColor: ui.colors.card,
-    ...(Platform.OS === "web"
-      ? {
-          boxShadow:
-            "0 24px 60px rgba(15,23,42,0.85), 0 0 0 1px rgba(15,23,42,1)",
-        }
-      : {}),
-  };
+  const isError = /error|inválida|sin permisos|inválid/i.test(msg);
 
-  const inputBase = {
+  const input = {
+    backgroundColor: ui.inputBg,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: Platform.OS === "web" ? 14 : 15,
+    fontSize: 16,
+    color: ui.textDark,
     borderWidth: 1,
-    borderColor: ui.colors.inputBorder,
-    borderRadius: ui.radius.sm,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "web" ? 10 : 12,
-    backgroundColor: ui.colors.inputBg,
-    color: ui.colors.text,
+    borderColor: "rgba(21,19,31,0.08)",
   } as const;
-
-  const label = {
-    fontSize: 13,
-    color: ui.colors.textSubtle,
-    marginBottom: 6,
-    fontWeight: "600",
-  } as const;
-
-  const headerTitle = {
-    fontSize: 30,
-    fontWeight: "800",
-    letterSpacing: 2,
-    textTransform: "uppercase" as const,
-    color: ui.colors.text,
-  };
-
-  const headerBadge = {
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: ui.colors.primarySoft,
-    backgroundColor: "rgba(15,23,42,0.9)",
-  };
-
-  const gradientCircle: any =
-    Platform.OS === "web"
-      ? {
-          position: "absolute",
-          width: 380,
-          height: 380,
-          borderRadius: 999,
-          background:
-            "radial-gradient(circle at 0% 0%, rgba(234,179,8,0.16), transparent 60%)",
-          top: -80,
-          left: -40,
-          pointerEvents: "none",
-        }
-      : {};
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: ui.colors.background,
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      {/* Glow de fondo */}
-      {Platform.OS === "web" && <View style={gradientCircle} />}
+    <View style={{ flex: 1, backgroundColor: ui.bgOuter }}>
+      {/* círculos decorativos de fondo, igual que el diseño */}
+      <View style={{ position: "absolute", top: 60, left: 40, width: 64, height: 64, borderRadius: 32, backgroundColor: ui.circleDeco }} />
+      <View style={{ position: "absolute", top: 70, right: 50, width: 44, height: 44, borderRadius: 22, backgroundColor: ui.circleDeco }} />
+      <View style={{ position: "absolute", bottom: 70, right: 60, width: 56, height: 56, borderRadius: 28, backgroundColor: ui.circleDeco }} />
 
-
-      {/* Tarjeta login */}
-      <View style={card}>
-        {/* Sub-header dentro de la tarjeta */}
-        <View style={{ marginBottom: 18, gap: 8 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "flex-end",
-            }}
-          >
-<Image
-  source={condosLogo}
-  style={{
-    width: 50,
-    height: 50,
-    alignItems: "flex-end",
-  }}
-  resizeMode="contain"
-/>
-            <Text
-              style={{
-                fontSize: 20,
-                color: ui.colors.primary,
-                textTransform: "uppercase",
-                letterSpacing: 1.1,
-                fontWeight: "700",
-              }}
-            >
-              Condos Admin
-            </Text>
-          </View>
+      <ScrollView
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
+        }}
+      >
+        <View
+          style={{
+            width: 400,
+            maxWidth: "100%",
+            backgroundColor: ui.card,
+            borderRadius: 32,
+            borderWidth: 3,
+            borderColor: ui.cardBorder,
+            paddingHorizontal: 26,
+            paddingVertical: 30,
+            alignItems: "center",
+            ...(Platform.OS === "web"
+              ? { boxShadow: "0 24px 50px rgba(21,19,31,0.35)" }
+              : {}),
+          }}
+        >
+          <TokkoBadge />
 
           <Text
             style={{
-              fontSize: 20,
+              marginTop: 16,
+              fontSize: 26,
               fontWeight: "800",
-              color: ui.colors.text,
+              color: ui.purple,
+              letterSpacing: 1,
             }}
           >
-            Iniciar sesión
+            CONDO
           </Text>
-          <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>
-            Accede al panel para gestionar tareas, colonias y proveedores.
+          <Text style={{ marginTop: 2, fontSize: 15, color: ui.textGray }}>
+            Tu comunidad te espera
           </Text>
-        </View>
 
-        {/* email */}
-        <View style={{ marginBottom: 14 }}>
-          <Text style={label}>Correo electrónico</Text>
+          {/* Continuar con Google (visual, sin integración de backend todavía) */}
+          <Pressable
+            onPress={() => setMsg("El login con Google todavía no está conectado en el backend.")}
+            style={{
+              marginTop: 22,
+              width: "100%",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              backgroundColor: "#FFFFFF",
+              borderRadius: 14,
+              paddingVertical: 14,
+              borderWidth: 1,
+              borderColor: "rgba(21,19,31,0.10)",
+            }}
+          >
+            <GoogleIcon size={20} />
+            <Text style={{ fontSize: 15, fontWeight: "700", color: ui.textDark }}>
+              Continuar con Google
+            </Text>
+          </Pressable>
+
+          {/* Divisor */}
+          <View style={{ flexDirection: "row", alignItems: "center", width: "100%", marginTop: 20, marginBottom: 14 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: "rgba(21,19,31,0.18)" }} />
+            <Text style={{ marginHorizontal: 10, fontSize: 12, color: ui.textGray }}>o con tu correo</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: "rgba(21,19,31,0.18)" }} />
+          </View>
+
+          {/* Email */}
           <TextInput
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
-            placeholder="tú@empresa.com"
-            placeholderTextColor={ui.colors.textMuted}
+            placeholder="Correo electrónico"
+            placeholderTextColor={ui.inputPlaceholder}
             returnKeyType="next"
-            style={inputBase}
-            onSubmitEditing={() => {}}
+            style={[input, { width: "100%" }]}
           />
-        </View>
 
-        {/* password + toggle */}
-        <View style={{ marginBottom: 10 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 6,
-              alignItems: "center",
-            }}
-          >
-            <Text style={label}>Contraseña</Text>
-            <Pressable onPress={() => setShowPwd((v) => !v)}>
-              <Text
-                style={{
-                  color: ui.colors.primary,
-                  fontWeight: "700",
-                  fontSize: 12,
-                }}
-              >
-                {showPwd ? "Ocultar" : "Ver"}
-              </Text>
-            </Pressable>
-          </View>
+          {/* Password */}
           <TextInput
             value={password}
             onChangeText={setPassword}
-            secureTextEntry={!showPwd}
-            placeholder="••••••••"
-            placeholderTextColor={ui.colors.textMuted}
+            secureTextEntry
+            placeholder="Contraseña"
+            placeholderTextColor={ui.inputPlaceholder}
             autoCorrect={false}
             returnKeyType="go"
             onSubmitEditing={entrar}
-            style={inputBase}
+            style={[input, { width: "100%", marginTop: 12 }]}
           />
-        </View>
 
-        {/* remember me + forgot */}
-        <View
-          style={{
-            marginTop: 6,
-            marginBottom: 14,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-          }}
-        >
-          <Pressable
-            onPress={() => setRemember((v) => !v)}
-            style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-          >
-            <View
-              style={{
-                width: 18,
-                height: 18,
-                borderRadius: 5,
-                borderWidth: 1,
-                borderColor: remember ? ui.colors.primary : ui.colors.inputBorder,
-                backgroundColor: remember ? ui.colors.primary : "transparent",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {remember ? (
-                <Text
-                  style={{
-                    color: "#000",
-                    fontWeight: "800",
-                    fontSize: 11,
-                  }}
-                >
-                  ✓
-                </Text>
-              ) : null}
-            </View>
-            <Text style={{ color: ui.colors.textSubtle, fontSize: 13 }}>
-              Recordarme en este dispositivo
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setMsg("Pide al administrador restablecer tu contraseña.")}
-          >
-            <Text
-              style={{
-                color: ui.colors.textMuted,
-                fontWeight: "600",
-                fontSize: 12,
-                textDecorationLine: "underline",
-              }}
-            >
-              ¿Olvidaste tu contraseña?
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* botón */}
-        <Pressable
-          onPress={entrar}
-          disabled={!canSubmit || busy}
-          style={{
-            borderRadius: ui.radius.md,
-            paddingVertical: 12,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor:
-              !canSubmit || busy
-                ? "rgba(234,179,8,0.35)"
-                : ui.colors.primary,
-          }}
-        >
-          {busy ? (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <ActivityIndicator color="#000" />
-              <Text
-                style={{
-                  color: "#000",
-                  fontWeight: "800",
-                  fontSize: 14,
-                }}
-              >
-                Entrando…
-              </Text>
-            </View>
-          ) : (
-            <Text
-              style={{
-                color: "#000",
-                fontWeight: "800",
-                fontSize: 14,
-              }}
-            >
-              Entrar
-            </Text>
-          )}
-        </Pressable>
-
-        {/* mensaje */}
-        {!!msg && (
+          {/* Recordarme + olvidaste tu contraseña */}
           <View
             style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              width: "100%",
               marginTop: 14,
-              padding: 10,
-              borderRadius: ui.radius.sm,
-              backgroundColor: /error|inválida|sin permisos|inválid/i.test(
-                msg
-              )
-                ? ui.colors.errorBg
-                : ui.colors.infoBg,
-              borderWidth: 1,
-              borderColor: /error|inválida|sin permisos|inválid/i.test(msg)
-                ? "rgba(248,113,113,0.45)"
-                : "rgba(56,189,248,0.45)",
             }}
           >
-            <Text
-              style={{
-                color: /error|inválida|sin permisos|inválid/i.test(msg)
-                  ? ui.colors.errorText
-                  : ui.colors.infoText,
-                fontSize: 12,
-              }}
+            <Pressable
+              onPress={() => setRemember((v) => !v)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
             >
-              {msg}
-            </Text>
-          </View>
-        )}
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 6,
+                  borderWidth: 1.5,
+                  borderColor: remember ? ui.purple : "rgba(21,19,31,0.3)",
+                  backgroundColor: remember ? ui.purple : "transparent",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {remember && (
+                  <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 12 }}>✓</Text>
+                )}
+              </View>
+              <Text style={{ color: ui.textGray, fontSize: 14 }}>Recordarme</Text>
+            </Pressable>
 
-        {/* pie */}
-        <View
-          style={{
-            marginTop: 18,
-            alignItems: "flex-start",
-            gap: 6,
-          }}
-        >
-          <View style={headerBadge}>
-            <Text
+            <Pressable
+              onPress={() => setMsg("Pide al administrador restablecer tu contraseña.")}
+            >
+              <Text
+                style={{
+                  color: ui.purple,
+                  fontSize: 13,
+                  fontWeight: "700",
+                  textDecorationLine: "underline",
+                }}
+              >
+                ¡Se te olvidó?
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Entrar */}
+          <Pressable
+            onPress={entrar}
+            disabled={!canSubmit || busy}
+            style={{
+              width: "100%",
+              marginTop: 18,
+              borderRadius: 14,
+              paddingVertical: 15,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: !canSubmit || busy ? "rgba(241,233,74,0.5)" : ui.yellow,
+            }}
+          >
+            {busy ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color={ui.yellowText} />
+                <Text style={{ color: ui.yellowText, fontWeight: "800", fontSize: 16 }}>
+                  Entrando…
+                </Text>
+              </View>
+            ) : (
+              <Text style={{ color: ui.yellowText, fontWeight: "800", fontSize: 16 }}>
+                Entrar
+              </Text>
+            )}
+          </Pressable>
+
+          {/* Regístrate */}
+          <Pressable
+            onPress={() => setMsg("El registro de nuevas cuentas todavía no está disponible.")}
+            style={{
+              width: "100%",
+              marginTop: 12,
+              borderRadius: 14,
+              paddingVertical: 15,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#FFFFFF",
+              borderWidth: 1,
+              borderColor: "rgba(21,19,31,0.10)",
+            }}
+          >
+            <Text style={{ color: ui.purple, fontWeight: "800", fontSize: 16 }}>
+              Regístrate
+            </Text>
+          </Pressable>
+
+          {/* mensaje de estado/error */}
+          {!!msg && msg !== "Entrando…" && (
+            <View
               style={{
-                fontSize: 11,
-                color: ui.colors.primary,
-                letterSpacing: 1,
-                textTransform: "uppercase",
+                marginTop: 14,
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                backgroundColor: isError ? ui.errorBg : ui.infoBg,
               }}
             >
-              Acceso restringido
-            </Text>
-          </View>
+              <Text style={{ color: isError ? ui.error : ui.info, fontSize: 12, textAlign: "center" }}>
+                {msg}
+              </Text>
+            </View>
+          )}
+
+          {/* Legal */}
           <Text
             style={{
-              color: ui.colors.textSubtle,
+              marginTop: 16,
               fontSize: 11,
-              marginTop: 4,
+              color: ui.textGray,
+              textAlign: "center",
+              lineHeight: 16,
             }}
           >
-            Al continuar aceptas los términos de uso y la política de
-            privacidad del sistema Condos.
+            Al continuar aceptas los términos de uso y el aviso{"\n"}de privacidad
           </Text>
         </View>
-      </View>
-
-      {/* footer minimal */}
-      <Text
-        style={{
-          color: ui.colors.textMuted,
-          marginTop: 18,
-          fontSize: 11,
-        }}
-      >
-        © {new Date().getFullYear()} Condos · Lokaly powered
-      </Text>
+      </ScrollView>
     </View>
   );
 }

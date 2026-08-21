@@ -1254,6 +1254,54 @@ export default function BoardsCompany() {
                         }
                       />
 
+                      <PillButton
+                        label="Unidades"
+                        tone="secondary"
+                        size="sm"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(company)/board-units",
+                            params: {
+                              boardId: b.id,
+                              orgId: b.orgId,
+                              boardName: b.name,
+                            },
+                          })
+                        }
+                      />
+
+                      <PillButton
+                        label="Unidades"
+                        tone="secondary"
+                        size="sm"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(company)/board-units",
+                            params: {
+                              boardId: b.id,
+                              orgId: b.orgId,
+                              boardName: b.name,
+                            },
+                          })
+                        }
+                      />
+
+                      <PillButton
+                        label="Cuotas y pagos"
+                        tone="secondary"
+                        size="sm"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(company)/board-billing",
+                            params: {
+                              boardId: b.id,
+                              orgId: b.orgId,
+                              boardName: b.name,
+                            },
+                          })
+                        }
+                      />
+
                       {canCrudBoards && (
                         <>
                           <PillButton

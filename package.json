@@ -34,6 +34,7 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.4",
     "react-native-drax": "^0.10.1",
+    "react-native-gesture-handler": "~2.28.0",
     "react-native-image-viewing": "^0.2.2",
     "react-native-reanimated": "~4.1.0",
     "react-native-safe-area-context": "~5.6.0",
@@ -44,6 +45,7 @@
     "react-native-worklets": "0.5.1",
     "victory": "^36.9.2",
     "victory-native": "^36.9.2",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
