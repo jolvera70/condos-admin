@@ -26,18 +26,18 @@ const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* ================== Tema Condos / Lokaly ================== */
 const ui = {
-  bg: "#020617",
-  bgSoft: "#030712",
-  surface: "#020617",
-  surfaceAlt: "#020617",
-  card: "#020617",
-  border: "#1F2937",
-  borderSoft: "#111827",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244,193,93,0.12)",
-  text: "#E5E7EB",
-  textMuted: "#94A3B8",
-  danger: "#F87171",
+  bg: "#FBF1E1",
+  bgSoft: "#FFFFFF",
+  surface: "#FFFFFF",
+  surfaceAlt: "#F5EAD8",
+  card: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  borderSoft: "rgba(21,19,31,0.06)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
+  danger: "#DC2626",
 };
 
 /* ================== Tipos ================== */
@@ -195,10 +195,10 @@ function PillButton({
   style?: any;
 }) {
   const palette = {
-    primary: { bg: "#1D4ED8", fg: "#F9FAFB" },
-    secondary: { bg: ui.bgSoft, fg: ui.text },
-    warning: { bg: "#F59E0B", fg: "#111827" },
-    danger: { bg: "#B91C1C", fg: "#F9FAFB" },
+    primary: { bg: "#5B4CE0", fg: "#FFFFFF" },
+    secondary: { bg: "rgba(21,19,31,0.06)", fg: ui.text },
+    warning: { bg: "rgba(217,119,6,0.12)", fg: "#A16207" },
+    danger: { bg: "rgba(220,38,38,0.10)", fg: "#B91C1C" },
   } as const;
   const p = palette[tone];
   const pv = size === "sm" ? 7 : 9;
@@ -220,8 +220,8 @@ function PillButton({
         style,
       ]}
     >
-      <Text style={{ color: p.fg, fontWeight: "700", fontSize: fs }}>
-        {label.toUpperCase()}
+      <Text style={{ color: p.fg, fontWeight: "600", fontSize: fs }}>
+        {label}
       </Text>
     </Pressable>
   );
@@ -229,10 +229,10 @@ function PillButton({
 
 function RoleBadge({ role }: { role: Role }) {
   const palette: Record<Role, { bg: string; fg: string }> = {
-    SUPERADMIN: { bg: "rgba(248,113,113,0.16)", fg: "#FCA5A5" },
-    ADMINISTRADOR: { bg: "rgba(96,165,250,0.18)", fg: "#BFDBFE" },
-    SUPERVISOR: { bg: "rgba(250,204,21,0.18)", fg: "#FACC15" },
-    OPERATIVO: { bg: "rgba(45,212,191,0.16)", fg: "#6EE7B7" },
+    SUPERADMIN: { bg: "rgba(220,38,38,0.12)", fg: "#B91C1C" },
+    ADMINISTRADOR: { bg: "rgba(37,99,235,0.12)", fg: "#1D4ED8" },
+    SUPERVISOR: { bg: "rgba(217,119,6,0.14)", fg: "#A16207" },
+    OPERATIVO: { bg: "rgba(13,148,136,0.12)", fg: "#0F766E" },
   };
   const { bg, fg } = palette[role] ?? { bg: ui.bgSoft, fg: ui.text };
   return (
@@ -254,15 +254,15 @@ function RoleBadge({ role }: { role: Role }) {
 function StatusBadge({ status }: { status?: string }) {
   const s = (status ?? "ACTIVE").toUpperCase();
   const map = {
-    ACTIVE: { bg: "rgba(34,197,94,0.18)", fg: "#BBF7D0", label: "ACTIVO" },
+    ACTIVE: { bg: "rgba(22,163,74,0.14)", fg: "#15803D", label: "ACTIVO" },
     SUSPENDED: {
-      bg: "rgba(148,163,184,0.18)",
-      fg: "#E5E7EB",
+      bg: "rgba(107,114,128,0.14)",
+      fg: "#4B5563",
       label: "SUSPENDIDO",
     },
     ARCHIVED: {
-      bg: "rgba(248,113,113,0.16)",
-      fg: "#FCA5A5",
+      bg: "rgba(220,38,38,0.12)",
+      fg: "#B91C1C",
       label: "ARCHIVADO",
     },
   } as const;
@@ -329,7 +329,7 @@ function MetricCard({
           marginBottom: 4,
         }}
       >
-        {label.toUpperCase()}
+        {label}
       </Text>
       <Text
         style={{
@@ -649,7 +649,7 @@ export default function UsersCompany() {
     padding: 14,
     ...(Platform.OS === "web"
       ? {
-          boxShadow: "0 18px 40px rgba(15,23,42,0.75)",
+          boxShadow: "0 4px 14px rgba(21,19,31,0.06)",
         }
       : {
           shadowColor: "#000",
@@ -682,108 +682,6 @@ export default function UsersCompany() {
     <SafeAreaView style={{ flex: 1, backgroundColor: ui.bg }}>
       <View style={{ flex: 1, alignItems: "center", backgroundColor: ui.bg }}>
         <View style={{ width: maxW, flex: 1 }}>
-          {/* Top bar */}
-          <View
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: isPhone ? 10 : 12,
-              borderBottomWidth: 1,
-              borderColor: ui.border,
-              backgroundColor: ui.bgSoft,
-              flexDirection: isPhone ? "column" : "row",
-              alignItems: isPhone ? "flex-start" : "center",
-              justifyContent: "space-between",
-              gap: isPhone ? 10 : 8,
-              ...(Platform.OS === "web"
-                ? { position: "sticky" as any, top: 0, zIndex: 50 }
-                : {}),
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <View
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 10,
-                  backgroundColor: ui.primarySoft,
-                  borderWidth: 1,
-                  borderColor: ui.primary,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-<Image
-  source={condosLogo}
-  style={{
-    width: 50,
-    height: 50,
-    alignItems: "flex-end",
-  }}
-  resizeMode="contain"
-/>
-              </View>
-              <View>
-                <Text
-                  style={{
-                    fontSize: isTablet || isDesktop ? 18 : 17,
-                    fontWeight: "800",
-                    color: ui.primary,
-                  }}
-                >
-                  Condos Admin
-                </Text>
-                <Text style={{ fontSize: 11, color: ui.textMuted }}>
-                  Gestión de usuarios
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={{
-                flexDirection: "row",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              {!!me?.email && (
-                <View
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                    borderWidth: 1,
-                    borderColor: ui.border,
-                    backgroundColor: ui.bg,
-                    maxWidth: 260,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: ui.text,
-                      fontSize: 12,
-                      fontWeight: "600",
-                    }}
-                    numberOfLines={1}
-                  >
-                    {me.email}
-                  </Text>
-                </View>
-              )}
-              <PillButton
-                label="Salir"
-                tone="danger"
-                size="sm"
-                onPress={logout}
-              />
-            </View>
-          </View>
-
           {/* Sub header con métricas y filtros */}
           <View
             style={{
@@ -828,12 +726,6 @@ export default function UsersCompany() {
                   }))}
                   minWidth={200}
                   testID="org-select"
-                />
-                <PillButton
-                  label="Menú principal"
-                  size="sm"
-                  tone="secondary"
-                  onPress={() => router.replace("/(app)/home")}
                 />
               </View>
             </View>
@@ -916,7 +808,7 @@ export default function UsersCompany() {
                               fontWeight: "700",
                             }}
                           >
-                            {labels[key].toUpperCase()}
+                            {labels[key]}
                           </Text>
                         </Pressable>
                       );
@@ -968,7 +860,7 @@ export default function UsersCompany() {
                   >
                     <Text
                       style={{
-                        color: msg.includes("✅") ? "#BFDBFE" : "#FCA5A5",
+                        color: msg.includes("✅") ? "#1D4ED8" : "#B91C1C",
                       }}
                     >
                       {msg}

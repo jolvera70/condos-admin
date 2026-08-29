@@ -63,17 +63,17 @@ const fmtDate = (d: Date) =>
 
 /** Tema dark unificado con Condos/Lokaly */
 const ui = {
-  bg: "#020617",
-  bgSoft: "#030712",
-  card: "#020617",
-  border: "#1F2937",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244,193,93,0.16)",
-  text: "#E5E7EB",
-  textMuted: "#94A3B8",
-  info: "#60A5FA",
-  warn: "#FBBF24",
-  ok: "#22C55E",
+  bg: "#FBF1E1",
+  bgSoft: "#FFFFFF",
+  card: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
+  info: "#2563EB",
+  warn: "#D97706",
+  ok: "#16A34A",
 };
 
 /** Alias de colores que ya usaba el componente */
@@ -318,7 +318,7 @@ export default function ReportsCompany() {
         padding: 14,
         ...(isWeb
           ? {
-              boxShadow: "0 18px 40px rgba(15,23,42,0.75)",
+              boxShadow: "0 4px 14px rgba(21,19,31,0.06)",
             }
           : {
               shadowColor: "#000",
@@ -353,49 +353,19 @@ export default function ReportsCompany() {
           gap: 10,
         }}
       >
-        {/* Logo / título */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View
+        <View>
+          <Text
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: 10,
-              backgroundColor: ui.primarySoft,
-              borderWidth: 1,
-              borderColor: ui.primary,
-              alignItems: "center",
-              justifyContent: "center",
+              fontSize: isTablet || isDesktop ? 18 : 17,
+              fontWeight: "800",
+              color: ui.text,
             }}
           >
-<Image
-  source={condosLogo}
-  style={{
-    width: 50,
-    height: 50,
-    alignItems: "flex-end",
-  }}
-  resizeMode="contain"
-/>
-          </View>
-          <View>
-            <Text
-              style={{
-                fontSize: isTablet || isDesktop ? 18 : 17,
-                fontWeight: "800",
-                color: ui.primary,
-              }}
-            >
-              Condos Admin
-            </Text>
-            <Text
-              style={{
-                fontSize: 11,
-                color: ui.textMuted,
-              }}
-            >
-              Reportes y analítica
-            </Text>
-          </View>
+            Reportes y analítica
+          </Text>
+          <Text style={{ fontSize: 12, color: ui.textMuted }}>
+            Consulta el desempeño de tus condominios.
+          </Text>
         </View>
 
         {/* Acciones */}
@@ -407,36 +377,7 @@ export default function ReportsCompany() {
             alignItems: "center",
           }}
         >
-          <Pill
-            label="Menú principal"
-            onPress={() => router.replace("/(app)/home")}
-          />
-
-          <View
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: ui.border,
-              backgroundColor: ui.bg,
-              maxWidth: isMobile ? 220 : 260,
-            }}
-          >
-            <Text
-              style={{
-                color: ui.text,
-                fontSize: 12,
-                fontWeight: "600",
-              }}
-              numberOfLines={1}
-            >
-              {me?.email ?? "usuario"}
-            </Text>
-          </View>
-
           <Pill label="CSV (server)" onPress={exportCsvServer} />
-          <Pill label="Salir" tone="danger" onPress={logout} />
         </View>
       </View>
     </View>
@@ -658,7 +599,7 @@ export default function ReportsCompany() {
           <View style={{ width: CONTAINER_W, padding: 16 }}>
             {error
               ? card(
-                  <Text style={{ color: "#FCA5A5" }}>
+                  <Text style={{ color: "#B91C1C" }}>
                     {error}
                   </Text>,
                   { marginBottom: 12 }
@@ -803,7 +744,7 @@ export default function ReportsCompany() {
                       style={{
                         labels: {
                           fontSize: 10,
-                          fill: "#E5E7EB",
+                          fill: "#4B5563",
                         },
                       }}
                       data={[
@@ -897,7 +838,7 @@ export default function ReportsCompany() {
                             style={{
                               labels: {
                                 fontSize: font,
-                                fill: "#E5E7EB",
+                                fill: "#4B5563",
                                 fontWeight: 500,
                                 padding: 4,
                               },
@@ -1074,7 +1015,7 @@ export default function ReportsCompany() {
           <View style={{ width: CONTAINER_W, padding: 16 }}>
             {error
               ? card(
-                  <Text style={{ color: "#FCA5A5" }}>
+                  <Text style={{ color: "#B91C1C" }}>
                     {error}
                   </Text>,
                   { marginBottom: 12 }
@@ -1219,7 +1160,7 @@ export default function ReportsCompany() {
                       style={{
                         labels: {
                           fontSize: 10,
-                          fill: "#E5E7EB",
+                          fill: "#4B5563",
                         },
                       }}
                       data={[
@@ -1313,7 +1254,7 @@ export default function ReportsCompany() {
                             style={{
                               labels: {
                                 fontSize: font,
-                                fill: "#E5E7EB",
+                                fill: "#4B5563",
                                 fontWeight: 500,
                                 padding: 4,
                               },
@@ -1503,7 +1444,7 @@ function Kpi({
         padding: 14,
         ...(isWeb
           ? {
-              boxShadow: "0 18px 40px rgba(15,23,42,0.75)",
+              boxShadow: "0 4px 14px rgba(21,19,31,0.06)",
             }
           : {
               shadowColor: "#000",
@@ -1598,14 +1539,14 @@ function Pill({
 }) {
   const palette = {
     primary: {
-      bg: "#0F172A",
-      bg2: "#020617",
-      fg: "#F9FAFB",
+      bg: "#5B4CE0",
+      bg2: "#4C3FCC",
+      fg: "#FFFFFF",
     },
     danger: {
-      bg: "#B91C1C",
-      bg2: "#7F1D1D",
-      fg: "#F9FAFB",
+      bg: "rgba(220,38,38,0.10)",
+      bg2: "rgba(220,38,38,0.16)",
+      fg: "#B91C1C",
     },
   } as const;
   const p = palette[tone];

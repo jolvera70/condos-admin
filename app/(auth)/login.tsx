@@ -13,6 +13,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 import { apiAuth, login } from "../../lib/api";
 import { AuthStorage } from "../../lib/auth";
+import { highestRole } from "../../lib/roles";
 import { useApp } from "../../lib/store";
 
 /* ============ Paleta según el diseño de Figma (TOKKO CONDO) ============ */
@@ -132,7 +133,12 @@ export default function Login() {
       setMe(me);
 
       setMsg("");
-      router.replace("/(app)/home");
+      const role = highestRole(me);
+      router.replace(
+        (role === "ADMINISTRADOR" || role === "SUPERVISOR"
+          ? "/(company)"
+          : "/(app)/home") as any
+      );
     } catch (e: any) {
       const status = e?.status;
       if (status === 401) setMsg("Credenciales inválidas.");

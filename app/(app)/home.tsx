@@ -17,17 +17,17 @@ import {
 const condosLogo = require("../../assets/images/iconCondos.png");
 
 const ui = {
-  bg: "#020617",
-  bgSoft: "#030712",
-  surface: "#020617",
-  surfaceSoft: "#020617",
-  border: "#1F2937",
-  borderSoft: "#111827",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244,193,93,0.12)",
-  text: "#E5E7EB",
-  textMuted: "#94A3B8",
-  danger: "#F87171",
+  bg: "#FBF1E1",
+  bgSoft: "#FFFFFF",
+  surface: "#FFFFFF",
+  surfaceSoft: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  borderSoft: "rgba(21,19,31,0.06)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
+  danger: "#DC2626",
 };
 
 /* ======================= Home ======================= */
@@ -272,7 +272,7 @@ export default function Home() {
             >
               <Text
                 style={{
-                  color: "#FCA5A5",
+                  color: "#B91C1C",
                   fontWeight: "600",
                   marginBottom: 4,
                 }}
@@ -377,7 +377,7 @@ function TopBar({ email, onLogout }: { email?: string; onLogout: () => void }) {
               borderRadius: 999,
               borderWidth: 1,
               borderColor: ui.border,
-              backgroundColor: "#020617",
+              backgroundColor: ui.bg,
             }}
           >
             <Text
@@ -404,7 +404,7 @@ function Card({
 }: PropsWithChildren<{ tone?: "default" | "danger"; style?: any }>) {
   const isWeb = Platform.OS === "web";
   const backgroundColor =
-    tone === "danger" ? "#111827" : ui.surfaceSoft;
+    tone === "danger" ? "rgba(220,38,38,0.06)" : ui.surfaceSoft;
 
   return (
     <View
@@ -416,7 +416,7 @@ function Card({
         backgroundColor,
         ...(isWeb
           ? {
-              boxShadow: "0 18px 50px rgba(15,23,42,0.75)",
+              boxShadow: "0 8px 24px rgba(21,19,31,0.08)",
             }
           : {}),
         ...style,
@@ -474,7 +474,7 @@ function Badge({
         borderRadius: 999,
         paddingHorizontal: 10,
         paddingVertical: 4,
-        backgroundColor: isPrimary ? ui.primarySoft : "#020617",
+        backgroundColor: isPrimary ? ui.primarySoft : "rgba(21,19,31,0.05)",
         borderWidth: 1,
         borderColor: isPrimary ? ui.primary : ui.border,
       }}
@@ -559,13 +559,13 @@ function Tile({ item }: { item: TileItem }) {
         borderRadius: 14,
         borderWidth: 1,
         borderColor: pressed ? ui.primary : ui.borderSoft,
-        backgroundColor: pressed ? "#020617" : "#020617",
+        backgroundColor: pressed ? "rgba(91,76,224,0.06)" : "#FFFFFF",
         ...(isWeb
           ? {
               transitionDuration: "120ms",
               boxShadow: pressed
-                ? "0 14px 35px rgba(15,23,42,0.85)"
-                : "0 10px 28px rgba(15,23,42,0.65)",
+                ? "0 8px 20px rgba(91,76,224,0.14)"
+                : "0 4px 14px rgba(21,19,31,0.06)",
               cursor: "pointer",
             }
           : {}),

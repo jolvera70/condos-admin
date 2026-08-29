@@ -21,15 +21,15 @@ const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* =============== Tema Lokaly / Condos =============== */
 const ui = {
-  bg: "#020617",
-  bgSoft: "#030712",
-  card: "#020617",
-  border: "#1F2937",
-  borderSoft: "#111827",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244,193,93,0.12)",
-  text: "#E5E7EB",
-  textMuted: "#94A3B8",
+  bg: "#FBF1E1",
+  bgSoft: "#FFFFFF",
+  card: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  borderSoft: "rgba(21,19,31,0.06)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
 };
 
 /* =============== Tipos =============== */
@@ -108,7 +108,7 @@ function PillButton({
 }) {
   const palette = {
     primary: { bg: "#1D4ED8", fg: "#F9FAFB" },
-    secondary: { bg: ui.bgSoft, fg: ui.text },
+    secondary: { bg: "rgba(21,19,31,0.06)", fg: ui.text },
     warning: { bg: "#F59E0B", fg: "#111827" },
     danger: { bg: "#B91C1C", fg: "#F9FAFB" },
   } as const;
@@ -143,10 +143,10 @@ function StatusBadge({ status }: { status?: TaskStatus }) {
   const key = String(status || "OPEN").toUpperCase();
 
   const palette: Record<string, { bg: string; fg: string }> = {
-    OPEN: { bg: "rgba(96,165,250,0.18)", fg: "#BFDBFE" },
-    IN_PROGRESS: { bg: "rgba(250,204,21,0.18)", fg: "#FACC15" },
-    DONE: { bg: "rgba(34,197,94,0.18)", fg: "#BBF7D0" },
-    ARCHIVED: { bg: "rgba(148,163,184,0.18)", fg: "#E5E7EB" },
+    OPEN: { bg: "rgba(37,99,235,0.12)", fg: "#1D4ED8" },
+    IN_PROGRESS: { bg: "rgba(217,119,6,0.14)", fg: "#A16207" },
+    DONE: { bg: "rgba(22,163,74,0.14)", fg: "#15803D" },
+    ARCHIVED: { bg: "rgba(107,114,128,0.14)", fg: "#4B5563" },
     DEFAULT: { bg: ui.bgSoft, fg: ui.textMuted },
   };
 
@@ -177,8 +177,8 @@ function Chip({
 }) {
   const palette = {
     primary: { bg: "rgba(244,193,93,0.16)", fg: ui.primary },
-    secondary: { bg: ui.bgSoft, fg: ui.textMuted },
-    warning: { bg: "rgba(250,204,21,0.18)", fg: "#FACC15" },
+    secondary: { bg: "rgba(21,19,31,0.06)", fg: ui.textMuted },
+    warning: { bg: "rgba(217,119,6,0.14)", fg: "#A16207" },
   }[tone];
   return (
     <View
@@ -581,91 +581,27 @@ export default function BoardTasks() {
   /* -------- Render -------- */
   return (
     <View style={{ flex: 1, backgroundColor: ui.bg }}>
-      {/* TOP BAR */}
+      {/* Header simple: volver + título (logo/nav ya viven en el sidebar) */}
       <View
         style={{
           paddingHorizontal: 16,
-          paddingVertical: isPhone ? 10 : 12,
+          paddingVertical: 12,
           borderBottomWidth: 1,
           borderColor: ui.border,
           backgroundColor: ui.bgSoft,
-          flexDirection: isPhone ? "column" : "row",
-          alignItems: isPhone ? "flex-start" : "center",
-          justifyContent: "space-between",
-          gap: isPhone ? 10 : 8,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 10,
-              backgroundColor: ui.primarySoft,
-              borderWidth: 1,
-              borderColor: ui.primary,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-<Image
-  source={condosLogo}
-  style={{
-    width: 50,
-    height: 50,
-    alignItems: "flex-end",
-  }}
-  resizeMode="contain"
-/>
-          </View>
-          <View>
-            <Text
-              style={{
-                fontSize: isTablet || isDesktop ? 18 : 17,
-                fontWeight: "800",
-                color: ui.primary,
-              }}
-            >
-              Condos Admin
-            </Text>
-            <Text style={{ fontSize: 11, color: ui.textMuted }}>
-              Tareas del condominio
-            </Text>
-          </View>
-        </View>
-
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          {!!me?.email && (
-            <View
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: ui.border,
-                backgroundColor: ui.bg,
-              }}
-            >
-              <Text
-                style={{
-                  color: ui.text,
-                  fontSize: 12,
-                  fontWeight: "600",
-                }}
-                numberOfLines={1}
-              >
-                {me.email}
-              </Text>
-            </View>
-          )}
-          <PillButton
-            label="Volver"
-            tone="secondary"
-            size="sm"
-            onPress={() => router.back()}
-          />
-          <PillButton label="Salir" tone="danger" size="sm" onPress={logout} />
-        </View>
+        <Pressable onPress={() => router.back()}>
+          <Text style={{ color: ui.primary, fontSize: 14, fontWeight: "700" }}>
+            ← Volver
+          </Text>
+        </Pressable>
+        <Text style={{ fontSize: 16, fontWeight: "800", color: ui.text }}>
+          Tareas del condominio
+        </Text>
       </View>
 
       {/* SUB HEADER: info de board + métricas + filtros */}
@@ -844,7 +780,7 @@ export default function BoardTasks() {
               >
                 <Text
                   style={{
-                    color: msg.includes("✅") ? "#BFDBFE" : "#FCA5A5",
+                    color: msg.includes("✅") ? "#1D4ED8" : "#B91C1C",
                   }}
                 >
                   {msg}

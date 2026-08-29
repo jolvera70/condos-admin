@@ -19,17 +19,17 @@ const condosLogo = require("../../assets/images/iconCondos.png");
 
 /* ========= Tema Condos / Lokaly (oscuro) — igual que boards.tsx ========= */
 const ui = {
-  bg: "#020617",
-  bgSoft: "#030712",
-  surface: "#020617",
-  card: "#020617",
-  border: "#1F2937",
-  borderSoft: "#111827",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244,193,93,0.12)",
-  text: "#E5E7EB",
-  textMuted: "#94A3B8",
-  danger: "#F87171",
+  bg: "#FBF1E1",
+  bgSoft: "#FFFFFF",
+  surface: "#FFFFFF",
+  card: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  borderSoft: "rgba(21,19,31,0.06)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
+  danger: "#DC2626",
 };
 
 type UnitStatus = "ACTIVE" | "INACTIVE";
@@ -62,7 +62,7 @@ function PillButton({
 }) {
   const palette = {
     primary: { bg: "#1D4ED8", fg: "#F9FAFB" },
-    secondary: { bg: ui.bgSoft, fg: ui.text },
+    secondary: { bg: "rgba(21,19,31,0.06)", fg: ui.text },
     warning: { bg: "#F59E0B", fg: "#111827" },
     danger: { bg: "#B91C1C", fg: "#F9FAFB" },
   } as const;
@@ -245,10 +245,6 @@ export default function BoardUnitsScreen() {
               ← Volver
             </Text>
           </Pressable>
-          <Image
-            source={condosLogo}
-            style={{ width: 24, height: 24, borderRadius: 6 }}
-          />
           <View>
             <Text style={{ color: ui.text, fontSize: 16, fontWeight: "800" }}>
               Unidades {boardName ? `· ${boardName}` : ""}

@@ -24,17 +24,17 @@ const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "";
 
 /* ========= Tema (igual que board-units.tsx) ========= */
 const ui = {
-  bg: "#020617",
-  bgSoft: "#030712",
-  card: "#020617",
-  border: "#1F2937",
-  borderSoft: "#111827",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244,193,93,0.12)",
-  text: "#E5E7EB",
-  textMuted: "#94A3B8",
-  danger: "#F87171",
-  success: "#4ADE80",
+  bg: "#FBF1E1",
+  bgSoft: "#FFFFFF",
+  card: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  borderSoft: "rgba(21,19,31,0.06)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
+  danger: "#DC2626",
+  success: "#16A34A",
 };
 
 type FeeFrequency = "MONTHLY" | "BIMONTHLY" | "QUARTERLY" | "ANNUAL";
@@ -584,7 +584,6 @@ export default function BoardBillingScreen() {
           <Pressable onPress={() => router.back()}>
             <Text style={{ color: ui.primary, fontSize: 14, fontWeight: "700" }}>← Volver</Text>
           </Pressable>
-          <Image source={condosLogo} style={{ width: 24, height: 24, borderRadius: 6 }} />
           <Text style={{ color: ui.text, fontSize: 16, fontWeight: "800" }}>
             Cuotas y pagos {boardName ? `· ${boardName}` : ""}
           </Text>
