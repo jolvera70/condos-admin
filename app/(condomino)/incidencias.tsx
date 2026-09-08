@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { apiAuth } from "../../lib/api";
 import { useMyUnits } from "../../lib/condomino";
+import { PickedEvidence, pickEvidence, uploadEvidence } from "../../lib/taskAttachments";
+import { useApp } from "../../lib/store";
 
 const ui = {
   bg: "#FBF1E1",
@@ -58,12 +60,17 @@ function fmtDate(s?: string) {
   }
 }
 
+const MAX_EVIDENCE = 3;
+
 export default function IncidenciasCondomino() {
+  const { token } = useApp();
   const { units, loading: unitsLoading } = useMyUnits();
   const [unitId, setUnitId] = useState("");
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [evidence, setEvidence] = useState<PickedEvidence[]>([]);
+  const [pickingEvidence, setPickingEvidence] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -103,6 +110,24 @@ export default function IncidenciasCondomino() {
     loadReported();
   }, [loadReported]);
 
+  const addEvidence = async () => {
+    if (evidence.length >= MAX_EVIDENCE) return;
+    setPickingEvidence(true);
+    setMsg("");
+    try {
+      const picked = await pickEvidence();
+      if (picked) setEvidence((prev) => [...prev, picked]);
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setPickingEvidence(false);
+    }
+  };
+
+  const removeEvidence = (idx: number) => {
+    setEvidence((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const reportar = async () => {
     setMsg("");
     if (!selectedUnit) {
@@ -115,13 +140,31 @@ export default function IncidenciasCondomino() {
     }
     setSubmitting(true);
     try {
-      await apiAuth(`/board/boards/${selectedUnit.boardId}/tasks`, "POST", {
+      const created = await apiAuth(`/board/boards/${selectedUnit.boardId}/tasks`, "POST", {
         title: title.trim(),
         description: description.trim() || undefined,
       });
+      const taskId = String(created?.id ?? "");
+
+      let evidenceErrors = 0;
+      if (taskId && evidence.length > 0) {
+        for (const file of evidence) {
+          try {
+            await uploadEvidence(selectedUnit.boardId, taskId, file, token);
+          } catch {
+            evidenceErrors++;
+          }
+        }
+      }
+
       setTitle("");
       setDescription("");
-      setMsg("Incidencia reportada ✅ La administración la revisará pronto.");
+      setEvidence([]);
+      setMsg(
+        evidenceErrors > 0
+          ? `Incidencia reportada ✅, pero ${evidenceErrors} foto(s) no se pudieron subir.`
+          : "Incidencia reportada ✅ La administración la revisará pronto."
+      );
       await loadReported();
     } catch (e: any) {
       setMsg(e.message ?? String(e));
@@ -202,6 +245,61 @@ export default function IncidenciasCondomino() {
                   numberOfLines={3}
                   style={[inputStyle, { minHeight: 70, textAlignVertical: "top" }]}
                 />
+              </Field>
+
+              <Field label={`Evidencia (opcional, hasta ${MAX_EVIDENCE} fotos)`}>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {evidence.map((f, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        backgroundColor: ui.bg,
+                        borderWidth: 1,
+                        borderColor: "#16A34A",
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                      }}
+                    >
+                      <Text style={{ fontSize: 13 }}>📷</Text>
+                      <Text style={{ color: "#16A34A", fontSize: 12, fontWeight: "700" }} numberOfLines={1}>
+                        {f.name}
+                      </Text>
+                      <Pressable onPress={() => removeEvidence(idx)} hitSlop={6}>
+                        <Text style={{ color: ui.danger, fontSize: 14, fontWeight: "800" }}>×</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                  {evidence.length < MAX_EVIDENCE && (
+                    <Pressable
+                      onPress={addEvidence}
+                      disabled={pickingEvidence}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        backgroundColor: ui.bg,
+                        borderWidth: 1,
+                        borderColor: ui.border,
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                      }}
+                    >
+                      {pickingEvidence ? (
+                        <ActivityIndicator size="small" color={ui.primary} />
+                      ) : (
+                        <Text style={{ fontSize: 13 }}>📎</Text>
+                      )}
+                      <Text style={{ color: ui.textMuted, fontSize: 12 }}>
+                        {pickingEvidence ? "Abriendo…" : "Agregar foto"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
               </Field>
 
               <Pressable

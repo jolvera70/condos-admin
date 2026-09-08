@@ -42,11 +42,13 @@ type Task = {
   description?: string;
   status: TaskStatus;
   assigneeId?: string;
+  reportedBy?: string;
   dueDate?: string; // yyyy-MM-dd
   createdAt?: string;
   updatedAt?: string;
 };
 
+type TaskAttachmentDto = { id: string; key: string; contentType: string; size: number; url: string };
 type UserOpt = { id: string; label: string };
 type StatusFilter = "ALL" | "OPEN" | "IN_PROGRESS" | "DONE" | "ARCHIVED";
 
@@ -395,6 +397,48 @@ export default function BoardTasks() {
     [users]
   );
 
+  // Evidencia adjunta (fotos que el condómino subió al reportar) — se carga
+  // bajo demanda al expandir cada tarjeta, no de golpe para todas las tareas.
+  const [attachmentsByTask, setAttachmentsByTask] = useState<
+    Record<string, TaskAttachmentDto[]>
+  >({});
+  const [expandedAttachmentsId, setExpandedAttachmentsId] = useState<string | null>(null);
+  const [loadingAttachmentsId, setLoadingAttachmentsId] = useState<string | null>(null);
+
+  const toggleAttachments = useCallback(
+    async (t: Task) => {
+      if (expandedAttachmentsId === t.id) {
+        setExpandedAttachmentsId(null);
+        return;
+      }
+      setExpandedAttachmentsId(t.id);
+      if (attachmentsByTask[t.id]) return;
+      setLoadingAttachmentsId(t.id);
+      try {
+        const raw = await apiAuth(`/board/${t.boardId}/tasks/${t.id}/attachments`, "GET");
+        const list: TaskAttachmentDto[] = (Array.isArray(raw) ? raw : []).map((a: any) => ({
+          id: String(a.id),
+          key: String(a.key),
+          contentType: String(a.contentType ?? ""),
+          size: Number(a.size ?? 0),
+          url: String(a.url ?? ""),
+        }));
+        setAttachmentsByTask((prev) => ({ ...prev, [t.id]: list }));
+      } catch {
+        setAttachmentsByTask((prev) => ({ ...prev, [t.id]: [] }));
+      } finally {
+        setLoadingAttachmentsId(null);
+      }
+    },
+    [expandedAttachmentsId, attachmentsByTask]
+  );
+
+  const openAttachment = (url: string) => {
+    if (Platform.OS === "web") {
+      window.open(url, "_blank");
+    }
+  };
+
   // Listener de notificación tap
   useEffect(() => {
     const sub =
@@ -451,6 +495,7 @@ export default function BoardTasks() {
           description: t.description,
           status: t.status as TaskStatus,
           assigneeId: t.assigneeId ? String(t.assigneeId) : undefined,
+          reportedBy: t.reportedBy ? String(t.reportedBy) : undefined,
           dueDate: t.dueDate ? String(t.dueDate) : undefined,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
@@ -965,6 +1010,14 @@ export default function BoardTasks() {
                 marginTop: 4,
               }}
             >
+              {t.reportedBy && (
+                <Chip
+                  label={`Reportada por: ${
+                    userNameById[t.reportedBy] ?? t.reportedBy
+                  }`}
+                  tone="primary"
+                />
+              )}
               {t.assigneeId && (
                 <Chip
                   label={`Asignado: ${
@@ -982,6 +1035,41 @@ export default function BoardTasks() {
                 />
               )}
             </View>
+
+            <Pressable onPress={() => toggleAttachments(t)} style={{ marginTop: 2 }}>
+              <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                {expandedAttachmentsId === t.id ? "Ocultar evidencia ▲" : "Ver evidencia 📎"}
+              </Text>
+            </Pressable>
+
+            {expandedAttachmentsId === t.id && (
+              <View style={{ marginTop: 4 }}>
+                {loadingAttachmentsId === t.id ? (
+                  <ActivityIndicator color={ui.primary} size="small" />
+                ) : (attachmentsByTask[t.id]?.length ?? 0) === 0 ? (
+                  <Text style={{ color: ui.textMuted, fontSize: 12 }}>
+                    No hay evidencia adjunta en esta tarea.
+                  </Text>
+                ) : (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {attachmentsByTask[t.id].map((a) => (
+                      <Pressable key={a.id} onPress={() => openAttachment(a.url)}>
+                        <Image
+                          source={{ uri: a.url }}
+                          style={{
+                            width: 84,
+                            height: 84,
+                            borderRadius: 8,
+                            backgroundColor: ui.primarySoft,
+                          }}
+                          resizeMode="cover"
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         )}
         ListFooterComponent={<View style={{ height: 24 }} />}
