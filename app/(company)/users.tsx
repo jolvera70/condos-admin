@@ -789,225 +789,6 @@ export default function UsersCompany() {
     <SafeAreaView style={{ flex: 1, backgroundColor: ui.bg }}>
       <View style={{ flex: 1, alignItems: "center", backgroundColor: ui.bg }}>
         <View style={{ width: maxW, flex: 1 }}>
-          {/* Sub header con métricas y filtros */}
-          <View
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              borderBottomWidth: 1,
-              borderColor: ui.border,
-              backgroundColor: ui.bgSoft,
-              gap: 10,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: 8,
-              }}
-            >
-              <View>
-                <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: "800",
-                    color: ui.text,
-                  }}
-                >
-                  {roleGroup === "CONDOMINO" ? "Condóminos" : "Usuarios de la empresa"}
-                </Text>
-                <Text style={{ fontSize: 12, color: ui.textMuted }}>
-                  {roleGroup === "CONDOMINO"
-                    ? "Cuentas de acceso de los residentes/propietarios de una unidad."
-                    : "Administra accesos y permisos del personal (administradores, supervisores y operativos)."}
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                <Select
-                  value={orgId as any}
-                  onChange={(v) => setOrgId(String(v))}
-                  options={orgs.map((t) => ({
-                    label: t.name,
-                    value: t.orgId as any,
-                  }))}
-                  minWidth={200}
-                  testID="org-select"
-                />
-              </View>
-            </View>
-
-            {/* Personal vs Condóminos: audiencias distintas, nunca mezcladas */}
-            <View
-              style={{
-                flexDirection: "row",
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: ui.border,
-                overflow: "hidden",
-                alignSelf: "flex-start",
-              }}
-            >
-              {(
-                [
-                  { key: "STAFF" as RoleGroup, label: "Personal (empresa)" },
-                  { key: "CONDOMINO" as RoleGroup, label: "Condóminos" },
-                ]
-              ).map(({ key, label }) => {
-                const isActive = roleGroup === key;
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => {
-                      setRoleGroup(key);
-                      setStatusFilter("ALL");
-                      setSearch("");
-                      setShowCreate(false);
-                    }}
-                    style={({ pressed }) => ({
-                      paddingVertical: 9,
-                      paddingHorizontal: 16,
-                      backgroundColor: isActive ? ui.primary : ui.bgSoft,
-                      opacity: pressed ? 0.85 : 1,
-                    })}
-                  >
-                    <Text
-                      style={{
-                        color: isActive ? "#FFFFFF" : ui.textMuted,
-                        fontSize: 12,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Colonia: los condóminos siempre se ven de una colonia a la vez, nunca mezclados */}
-            {roleGroup === "CONDOMINO" && (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={{ fontSize: 12, color: ui.textMuted, fontWeight: "600" }}>
-                  Colonia:
-                </Text>
-                {boards.length === 0 ? (
-                  <Text style={{ fontSize: 12, color: ui.textMuted }}>
-                    Esta empresa todavía no tiene colonias registradas.
-                  </Text>
-                ) : (
-                  <Select
-                    value={boardFilter || boards[0]?.id || ""}
-                    onChange={(v) => setBoardFilter(v)}
-                    options={[
-                      ...boards.map((b) => ({ label: b.name, value: b.id })),
-                      { label: "Sin colonia asignada", value: NO_BOARD },
-                    ]}
-                    minWidth={200}
-                  />
-                )}
-              </View>
-            )}
-
-            {/* Métricas */}
-            <View
-              style={{
-                flexDirection: "row",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <MetricCard label="Total usuarios" value={totalUsers} />
-              <MetricCard label="Activos" value={activeCount} />
-              <MetricCard label="Suspendidos" value={suspendedCount} />
-            </View>
-
-            {/* Buscador + filtro de estado + crear */}
-            <View
-              style={{
-                flexDirection: isPhone ? "column" : "row",
-                gap: 10,
-                alignItems: "center",
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  placeholder="Buscar por nombre o email..."
-                  placeholderTextColor={ui.textMuted}
-                  value={search}
-                  onChangeText={setSearch}
-                  style={input}
-                />
-              </View>
-
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 8,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                {/* Segmented control de estado */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    borderRadius: 999,
-                    borderWidth: 1,
-                    borderColor: ui.border,
-                    overflow: "hidden",
-                  }}
-                >
-                  {(["ALL", "ACTIVE", "SUSPENDED"] as StatusFilter[]).map(
-                    (key) => {
-                      const isActive = statusFilter === key;
-                      const labels: Record<StatusFilter, string> = {
-                        ALL: "Todos",
-                        ACTIVE: "Activos",
-                        SUSPENDED: "Suspendidos",
-                        ARCHIVED: "Archivados",
-                      };
-                      return (
-                        <Pressable
-                          key={key}
-                          onPress={() => setStatusFilter(key)}
-                          style={({ pressed }) => ({
-                            paddingVertical: 7,
-                            paddingHorizontal: 12,
-                            backgroundColor: isActive
-                              ? ui.primarySoft
-                              : ui.bgSoft,
-                            opacity: pressed ? 0.8 : 1,
-                          })}
-                        >
-                          <Text
-                            style={{
-                              color: isActive ? ui.primary : ui.textMuted,
-                              fontSize: 11,
-                              fontWeight: "700",
-                            }}
-                          >
-                            {labels[key]}
-                          </Text>
-                        </Pressable>
-                      );
-                    }
-                  )}
-                </View>
-
-                {canManageUsers && (
-                  <PillButton
-                    label={showCreate ? "Ocultar" : "Crear usuario"}
-                    tone={showCreate ? "secondary" : "primary"}
-                    size="sm"
-                    onPress={() => setShowCreate((v) => !v)}
-                  />
-                )}
-              </View>
-            </View>
-          </View>
 
           {/* Lista */}
           <FlatList
@@ -1025,6 +806,225 @@ export default function UsersCompany() {
             onRefresh={loadUsers}
             ListHeaderComponent={
               <View style={{ gap: 12 }}>
+              {/* Sub header con métricas y filtros */}
+              <View
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderBottomWidth: 1,
+                  borderColor: ui.border,
+                  backgroundColor: ui.bgSoft,
+                  gap: 10,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                  }}
+                >
+                  <View>
+                    <Text
+                      style={{
+                        fontSize: 18,
+                        fontWeight: "800",
+                        color: ui.text,
+                      }}
+                    >
+                      {roleGroup === "CONDOMINO" ? "Condóminos" : "Usuarios de la empresa"}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: ui.textMuted }}>
+                      {roleGroup === "CONDOMINO"
+                        ? "Cuentas de acceso de los residentes/propietarios de una unidad."
+                        : "Administra accesos y permisos del personal (administradores, supervisores y operativos)."}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                    <Select
+                      value={orgId as any}
+                      onChange={(v) => setOrgId(String(v))}
+                      options={orgs.map((t) => ({
+                        label: t.name,
+                        value: t.orgId as any,
+                      }))}
+                      minWidth={200}
+                      testID="org-select"
+                    />
+                  </View>
+                </View>
+
+                {/* Personal vs Condóminos: audiencias distintas, nunca mezcladas */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: ui.border,
+                    overflow: "hidden",
+                    alignSelf: "flex-start",
+                  }}
+                >
+                  {(
+                    [
+                      { key: "STAFF" as RoleGroup, label: "Personal (empresa)" },
+                      { key: "CONDOMINO" as RoleGroup, label: "Condóminos" },
+                    ]
+                  ).map(({ key, label }) => {
+                    const isActive = roleGroup === key;
+                    return (
+                      <Pressable
+                        key={key}
+                        onPress={() => {
+                          setRoleGroup(key);
+                          setStatusFilter("ALL");
+                          setSearch("");
+                          setShowCreate(false);
+                        }}
+                        style={({ pressed }) => ({
+                          paddingVertical: 9,
+                          paddingHorizontal: 16,
+                          backgroundColor: isActive ? ui.primary : ui.bgSoft,
+                          opacity: pressed ? 0.85 : 1,
+                        })}
+                      >
+                        <Text
+                          style={{
+                            color: isActive ? "#FFFFFF" : ui.textMuted,
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* Colonia: los condóminos siempre se ven de una colonia a la vez, nunca mezclados */}
+                {roleGroup === "CONDOMINO" && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 12, color: ui.textMuted, fontWeight: "600" }}>
+                      Colonia:
+                    </Text>
+                    {boards.length === 0 ? (
+                      <Text style={{ fontSize: 12, color: ui.textMuted }}>
+                        Esta empresa todavía no tiene colonias registradas.
+                      </Text>
+                    ) : (
+                      <Select
+                        value={boardFilter || boards[0]?.id || ""}
+                        onChange={(v) => setBoardFilter(v)}
+                        options={[
+                          ...boards.map((b) => ({ label: b.name, value: b.id })),
+                          { label: "Sin colonia asignada", value: NO_BOARD },
+                        ]}
+                        minWidth={200}
+                      />
+                    )}
+                  </View>
+                )}
+
+                {/* Métricas */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <MetricCard label="Total usuarios" value={totalUsers} />
+                  <MetricCard label="Activos" value={activeCount} />
+                  <MetricCard label="Suspendidos" value={suspendedCount} />
+                </View>
+
+                {/* Buscador + filtro de estado + crear */}
+                <View
+                  style={{
+                    flexDirection: isPhone ? "column" : "row",
+                    gap: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      placeholder="Buscar por nombre o email..."
+                      placeholderTextColor={ui.textMuted}
+                      value={search}
+                      onChangeText={setSearch}
+                      style={input}
+                    />
+                  </View>
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {/* Segmented control de estado */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: ui.border,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {(["ALL", "ACTIVE", "SUSPENDED"] as StatusFilter[]).map(
+                        (key) => {
+                          const isActive = statusFilter === key;
+                          const labels: Record<StatusFilter, string> = {
+                            ALL: "Todos",
+                            ACTIVE: "Activos",
+                            SUSPENDED: "Suspendidos",
+                            ARCHIVED: "Archivados",
+                          };
+                          return (
+                            <Pressable
+                              key={key}
+                              onPress={() => setStatusFilter(key)}
+                              style={({ pressed }) => ({
+                                paddingVertical: 7,
+                                paddingHorizontal: 12,
+                                backgroundColor: isActive
+                                  ? ui.primarySoft
+                                  : ui.bgSoft,
+                                opacity: pressed ? 0.8 : 1,
+                              })}
+                            >
+                              <Text
+                                style={{
+                                  color: isActive ? ui.primary : ui.textMuted,
+                                  fontSize: 11,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                {labels[key]}
+                              </Text>
+                            </Pressable>
+                          );
+                        }
+                      )}
+                    </View>
+
+                    {canManageUsers && (
+                      <PillButton
+                        label={showCreate ? "Ocultar" : "Crear usuario"}
+                        tone={showCreate ? "secondary" : "primary"}
+                        size="sm"
+                        onPress={() => setShowCreate((v) => !v)}
+                      />
+                    )}
+                  </View>
+                </View>
+              </View>
                 {!!msg && (
                   <View
                     style={{
