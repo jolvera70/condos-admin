@@ -2,6 +2,7 @@
 
 import { AuthImgWeb, AuthVideoWeb } from "@/components/auth-media-web";
 import { apiAuth } from "@/lib/api";
+import { landingRouteFor } from "@/lib/roles";
 import { useApp } from "@/lib/store";
 import { Picker } from "@react-native-picker/picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -390,7 +391,7 @@ export default function OpsTasks() {
     >
       <TopBar
         email={me?.email}
-        onMenu={() => router.push("/(operator)" as any)}
+        onMenu={() => router.push(landingRouteFor(me) as any)}
         onLogout={() => logout()}
       />
 

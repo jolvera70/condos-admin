@@ -8,6 +8,7 @@ import { useApp } from "../../lib/store";
 const NAV_ITEMS: NavItem[] = [
   { label: "Inicio", route: "/(company)", icon: "home" },
   { label: "Condominios", route: "/(company)/boards", icon: "business-outline" },
+  { label: "Mis tareas", route: "/(ops)/tasks", icon: "checkbox-outline" },
   { label: "Operadores", route: "/(company)/users", icon: "people-outline" },
   { label: "Reportes", route: "/(company)/reports", icon: "bar-chart-outline" },
 ];
@@ -32,10 +33,11 @@ export default function CompanyLayout() {
   const displayName = (me as any)?.name ?? (me?.email ?? "").split("@")[0] ?? "";
 
   const isActive = (route: string) => {
-    if (route === "/(company)") {
+    const path = route.replace("/(company)", "").replace("/(ops)", "") || "/";
+    if (path === "/") {
       return pathname === "/(company)" || pathname === "/" || pathname === "";
     }
-    return pathname.startsWith(route.replace("/(company)", ""));
+    return pathname === path || pathname.startsWith(`${path}/`);
   };
 
   return (
