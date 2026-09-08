@@ -518,6 +518,28 @@ export default function BoardTasks() {
     loadTasks();
   }, [loadTasks]);
 
+  /* -------- asignar/reasignar tarea existente -------- */
+  const [reassigningTaskId, setReassigningTaskId] = useState<string | null>(null);
+  const [savingAssignee, setSavingAssignee] = useState(false);
+
+  const reassign = async (t: Task, newAssigneeId: string) => {
+    setSavingAssignee(true);
+    setMsg("");
+    try {
+      await apiAuth(`/board/tasks/${t.id}`, "PUT", {
+        title: t.title,
+        description: t.description,
+        assigneeId: newAssigneeId,
+      });
+      setReassigningTaskId(null);
+      await loadTasks();
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setSavingAssignee(false);
+    }
+  };
+
   /* -------- crear tarea -------- */
   const createTask = async () => {
     try {
@@ -1018,13 +1040,24 @@ export default function BoardTasks() {
                   tone="primary"
                 />
               )}
-              {t.assigneeId && (
+              {t.assigneeId ? (
                 <Chip
                   label={`Asignado: ${
                     userNameById[t.assigneeId] ?? t.assigneeId
                   }`}
                 />
+              ) : (
+                <Chip label="Sin asignar" tone="warning" />
               )}
+              <Pressable
+                onPress={() =>
+                  setReassigningTaskId(reassigningTaskId === t.id ? null : t.id)
+                }
+              >
+                <Text style={{ color: ui.primary, fontSize: 11, fontWeight: "700" }}>
+                  {t.assigneeId ? "Reasignar" : "Asignar"}
+                </Text>
+              </Pressable>
               {t.dueDate && <Chip label={`Vence: ${t.dueDate}`} tone="warning" />}
               {!!t.createdAt && (
                 <Chip
@@ -1035,6 +1068,24 @@ export default function BoardTasks() {
                 />
               )}
             </View>
+
+            {reassigningTaskId === t.id && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 4,
+                }}
+              >
+                <AssigneeSelector
+                  assigneeId={t.assigneeId ?? ""}
+                  setAssigneeId={(v) => reassign(t, v)}
+                  users={users}
+                />
+                {savingAssignee && <ActivityIndicator size="small" color={ui.primary} />}
+              </View>
+            )}
 
             <Pressable onPress={() => toggleAttachments(t)} style={{ marginTop: 2 }}>
               <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
