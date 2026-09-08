@@ -711,170 +711,6 @@ export default function BoardsCompany() {
       <SafeAreaView style={{ flex: 1, backgroundColor: ui.bg }}>
         <View style={{ flex: 1, alignItems: "center", backgroundColor: ui.bg }}>
           <View style={{ width: maxW, flex: 1 }}>
-            {/* SUB HEADER + FILTROS */}
-            <View
-                style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  borderBottomWidth: 1,
-                  borderColor: ui.border,
-                  backgroundColor: ui.bgSoft,
-                  gap: 10,
-                }}
-            >
-              <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-              >
-                <View>
-                  <Text
-                      style={{
-                        fontSize: 18,
-                        fontWeight: "800",
-                        color: ui.text,
-                      }}
-                  >
-                    Condominios y colonias
-                  </Text>
-                  <Text style={{ fontSize: 12, color: ui.textMuted }}>
-                    Configura los tableros donde se gestionan las tareas.
-                  </Text>
-                </View>
-
-                <View
-                    style={{
-                      flexDirection: "row",
-                      gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                    }}
-                >
-                  <Select
-                      value={selectedOrgId as any}
-                      onChange={(v) => setSelectedOrgId(String(v))}
-                      options={tenants.map((t) => ({
-                        label: labelOfTenant(t),
-                        value: t.orgId as any,
-                      }))}
-                      minWidth={220}
-                  />
-                </View>
-              </View>
-
-              {/* Fila de métricas */}
-              <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-              >
-                <MetricCard label="Total" value={totalBoards} />
-                <MetricCard label="Activos" value={activeCount} />
-                <MetricCard label="Archivados" value={archivedCount} />
-              </View>
-
-              {/* Filtros secundarios: buscador + estado */}
-              <View
-                  style={{
-                    flexDirection: isPhone ? "column" : "row",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
-              >
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                      placeholder="Buscar condominio por nombre o descripción..."
-                      placeholderTextColor={ui.textMuted}
-                      value={search}
-                      onChangeText={setSearch}
-                      style={input}
-                  />
-                </View>
-
-                <View
-                    style={{
-                      flexDirection: "row",
-                      gap: 6,
-                      alignItems: "center",
-                    }}
-                >
-                  {/* Segmented control Activos / Activos + Archivados (web y native igual) */}
-                  <View
-                      style={{
-                        flexDirection: "row",
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: ui.border,
-                        overflow: "hidden",
-                      }}
-                  >
-                    <Pressable
-                        onPress={() => setIncludeArchived(false)}
-                        style={({ pressed }) => ({
-                          paddingVertical: 7,
-                          paddingHorizontal: 12,
-                          backgroundColor: !includeArchived
-                              ? ui.primarySoft
-                              : ui.bgSoft,
-                          opacity: pressed ? 0.8 : 1,
-                        })}
-                    >
-                      <Text
-                          style={{
-                            color: !includeArchived ? ui.primary : ui.textMuted,
-                            fontSize: 11,
-                            fontWeight: "700",
-                          }}
-                      >
-                        Solo activos
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setIncludeArchived(true)}
-                        style={({ pressed }) => ({
-                          paddingVertical: 7,
-                          paddingHorizontal: 12,
-                          backgroundColor: includeArchived
-                              ? ui.primarySoft
-                              : ui.bgSoft,
-                          opacity: pressed ? 0.8 : 1,
-                        })}
-                    >
-                      <Text
-                          style={{
-                            color: includeArchived ? ui.primary : ui.textMuted,
-                            fontSize: 11,
-                            fontWeight: "700",
-                          }}
-                      >
-                        Activos + archivados
-                      </Text>
-                    </Pressable>
-                  </View>
-
-                  {canCrudBoards && (
-                      <PillButton
-                          label={showCreate ? "Ocultar" : "Crear condominio"}
-                          tone={showCreate ? "secondary" : "primary"}
-                          size="sm"
-                          onPress={() => setShowCreate((v) => !v)}
-                      />
-                  )}
-
-                  <PillButton
-                      label="Recargar"
-                      size="sm"
-                      onPress={loadBoards}
-                  />
-                </View>
-              </View>
-            </View>
 
             {/* LISTA */}
             <FlatList
@@ -894,6 +730,170 @@ export default function BoardsCompany() {
                 onRefresh={loadBoards}
                 ListHeaderComponent={
                   <View style={{ gap: 12 }}>
+                {/* SUB HEADER + FILTROS */}
+                <View
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderBottomWidth: 1,
+                      borderColor: ui.border,
+                      backgroundColor: ui.bgSoft,
+                      gap: 10,
+                    }}
+                >
+                  <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 8,
+                      }}
+                  >
+                    <View>
+                      <Text
+                          style={{
+                            fontSize: 18,
+                            fontWeight: "800",
+                            color: ui.text,
+                          }}
+                      >
+                        Condominios y colonias
+                      </Text>
+                      <Text style={{ fontSize: 12, color: ui.textMuted }}>
+                        Configura los tableros donde se gestionan las tareas.
+                      </Text>
+                    </View>
+
+                    <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 8,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                    >
+                      <Select
+                          value={selectedOrgId as any}
+                          onChange={(v) => setSelectedOrgId(String(v))}
+                          options={tenants.map((t) => ({
+                            label: labelOfTenant(t),
+                            value: t.orgId as any,
+                          }))}
+                          minWidth={220}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Fila de métricas */}
+                  <View
+                      style={{
+                        flexDirection: "row",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                  >
+                    <MetricCard label="Total" value={totalBoards} />
+                    <MetricCard label="Activos" value={activeCount} />
+                    <MetricCard label="Archivados" value={archivedCount} />
+                  </View>
+
+                  {/* Filtros secundarios: buscador + estado */}
+                  <View
+                      style={{
+                        flexDirection: isPhone ? "column" : "row",
+                        gap: 10,
+                        alignItems: "center",
+                      }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <TextInput
+                          placeholder="Buscar condominio por nombre o descripción..."
+                          placeholderTextColor={ui.textMuted}
+                          value={search}
+                          onChangeText={setSearch}
+                          style={input}
+                      />
+                    </View>
+
+                    <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 6,
+                          alignItems: "center",
+                        }}
+                    >
+                      {/* Segmented control Activos / Activos + Archivados (web y native igual) */}
+                      <View
+                          style={{
+                            flexDirection: "row",
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: ui.border,
+                            overflow: "hidden",
+                          }}
+                      >
+                        <Pressable
+                            onPress={() => setIncludeArchived(false)}
+                            style={({ pressed }) => ({
+                              paddingVertical: 7,
+                              paddingHorizontal: 12,
+                              backgroundColor: !includeArchived
+                                  ? ui.primarySoft
+                                  : ui.bgSoft,
+                              opacity: pressed ? 0.8 : 1,
+                            })}
+                        >
+                          <Text
+                              style={{
+                                color: !includeArchived ? ui.primary : ui.textMuted,
+                                fontSize: 11,
+                                fontWeight: "700",
+                              }}
+                          >
+                            Solo activos
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                            onPress={() => setIncludeArchived(true)}
+                            style={({ pressed }) => ({
+                              paddingVertical: 7,
+                              paddingHorizontal: 12,
+                              backgroundColor: includeArchived
+                                  ? ui.primarySoft
+                                  : ui.bgSoft,
+                              opacity: pressed ? 0.8 : 1,
+                            })}
+                        >
+                          <Text
+                              style={{
+                                color: includeArchived ? ui.primary : ui.textMuted,
+                                fontSize: 11,
+                                fontWeight: "700",
+                              }}
+                          >
+                            Activos + archivados
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {canCrudBoards && (
+                          <PillButton
+                              label={showCreate ? "Ocultar" : "Crear condominio"}
+                              tone={showCreate ? "secondary" : "primary"}
+                              size="sm"
+                              onPress={() => setShowCreate((v) => !v)}
+                          />
+                      )}
+
+                      <PillButton
+                          label="Recargar"
+                          size="sm"
+                          onPress={loadBoards}
+                      />
+                    </View>
+                  </View>
+                </View>
                     {!!msg && (
                         <View
                             style={{

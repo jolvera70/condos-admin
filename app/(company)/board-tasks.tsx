@@ -649,148 +649,6 @@ export default function BoardTasks() {
         </Text>
       </View>
 
-      {/* SUB HEADER: info de board + métricas + filtros */}
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          borderBottomWidth: 1,
-          borderColor: ui.border,
-          backgroundColor: ui.bgSoft,
-          gap: 10,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 8,
-          }}
-        >
-          <View style={{ flexShrink: 1, maxWidth: "70%" }}>
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "800",
-                color: ui.text,
-              }}
-              numberOfLines={1}
-            >
-              {boardName || "Tareas del board"}
-            </Text>
-            <Text
-              style={{
-                fontSize: 12,
-                color: ui.textMuted,
-              }}
-              numberOfLines={1}
-            >
-              ID board: {boardId}
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-            {/* botón mostrar formulario */}
-            <PillButton
-              label={showCreate ? "Ocultar" : "Crear tarea"}
-              tone={showCreate ? "secondary" : "primary"}
-              size="sm"
-              onPress={() => setShowCreate((v) => !v)}
-            />
-          </View>
-        </View>
-
-        {/* Métricas */}
-        <View
-          style={{
-            flexDirection: "row",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <MetricCard label="Total tareas" value={totalTasks} />
-          <MetricCard label="Abiertas" value={openTasks} />
-          <MetricCard label="En progreso" value={inProgressTasks} />
-          <MetricCard label="Completadas" value={doneTasks} />
-        </View>
-
-        {/* Buscador + filtro estado */}
-        <View
-          style={{
-            flexDirection: isPhone ? "column" : "row",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <TextInput
-              placeholder="Buscar por título, descripción o asignado…"
-              placeholderTextColor={ui.textMuted}
-              value={search}
-              onChangeText={setSearch}
-              style={input}
-            />
-          </View>
-
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: ui.border,
-                overflow: "hidden",
-              }}
-            >
-              {(
-                ["ALL", "OPEN", "IN_PROGRESS", "DONE"] as StatusFilter[]
-              ).map((key) => {
-                const isActive = statusFilter === key;
-                const labels: Record<StatusFilter, string> = {
-                  ALL: "Todas",
-                  OPEN: "Abiertas",
-                  IN_PROGRESS: "En progreso",
-                  DONE: "Completadas",
-                  ARCHIVED: "Archivadas",
-                };
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => setStatusFilter(key)}
-                    style={({ pressed }) => ({
-                      paddingVertical: 7,
-                      paddingHorizontal: 12,
-                      backgroundColor: isActive
-                        ? ui.primarySoft
-                        : ui.bgSoft,
-                      opacity: pressed ? 0.8 : 1,
-                    })}
-                  >
-                    <Text
-                      style={{
-                        color: isActive ? ui.primary : ui.textMuted,
-                        fontSize: 11,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {labels[key].toUpperCase()}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </View>
 
       {/* LISTA PRINCIPAL */}
       <FlatList
@@ -809,6 +667,148 @@ export default function BoardTasks() {
         columnWrapperStyle={twoCols ? { gap: 16 } : undefined}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
+          {/* SUB HEADER: info de board + métricas + filtros */}
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderBottomWidth: 1,
+              borderColor: ui.border,
+              backgroundColor: ui.bgSoft,
+              gap: 10,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <View style={{ flexShrink: 1, maxWidth: "70%" }}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "800",
+                    color: ui.text,
+                  }}
+                  numberOfLines={1}
+                >
+                  {boardName || "Tareas del board"}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: ui.textMuted,
+                  }}
+                  numberOfLines={1}
+                >
+                  ID board: {boardId}
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                {/* botón mostrar formulario */}
+                <PillButton
+                  label={showCreate ? "Ocultar" : "Crear tarea"}
+                  tone={showCreate ? "secondary" : "primary"}
+                  size="sm"
+                  onPress={() => setShowCreate((v) => !v)}
+                />
+              </View>
+            </View>
+
+            {/* Métricas */}
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <MetricCard label="Total tareas" value={totalTasks} />
+              <MetricCard label="Abiertas" value={openTasks} />
+              <MetricCard label="En progreso" value={inProgressTasks} />
+              <MetricCard label="Completadas" value={doneTasks} />
+            </View>
+
+            {/* Buscador + filtro estado */}
+            <View
+              style={{
+                flexDirection: isPhone ? "column" : "row",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  placeholder="Buscar por título, descripción o asignado…"
+                  placeholderTextColor={ui.textMuted}
+                  value={search}
+                  onChangeText={setSearch}
+                  style={input}
+                />
+              </View>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: ui.border,
+                    overflow: "hidden",
+                  }}
+                >
+                  {(
+                    ["ALL", "OPEN", "IN_PROGRESS", "DONE"] as StatusFilter[]
+                  ).map((key) => {
+                    const isActive = statusFilter === key;
+                    const labels: Record<StatusFilter, string> = {
+                      ALL: "Todas",
+                      OPEN: "Abiertas",
+                      IN_PROGRESS: "En progreso",
+                      DONE: "Completadas",
+                      ARCHIVED: "Archivadas",
+                    };
+                    return (
+                      <Pressable
+                        key={key}
+                        onPress={() => setStatusFilter(key)}
+                        style={({ pressed }) => ({
+                          paddingVertical: 7,
+                          paddingHorizontal: 12,
+                          backgroundColor: isActive
+                            ? ui.primarySoft
+                            : ui.bgSoft,
+                          opacity: pressed ? 0.8 : 1,
+                        })}
+                      >
+                        <Text
+                          style={{
+                            color: isActive ? ui.primary : ui.textMuted,
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {labels[key].toUpperCase()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          </View>
             {!!msg && (
               <View
                 style={{
