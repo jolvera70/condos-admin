@@ -96,6 +96,12 @@ export default function ReservasCondomino() {
   const [myReservations, setMyReservations] = useState<Reservation[]>([]);
   const [loadingMine, setLoadingMine] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editPeopleCount, setEditPeopleCount] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   useEffect(() => {
     if (!unitId && units.length > 0) setUnitId(units[0].id);
   }, [units, unitId]);
@@ -210,6 +216,39 @@ export default function ReservasCondomino() {
       setMsg(e.message ?? String(e));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const startEdit = (r: Reservation) => {
+    setMsg("");
+    setEditingId(r.id);
+    setEditDate(r.date);
+    setEditPeopleCount(r.peopleCount ? String(r.peopleCount) : "");
+    setEditNote(r.note ?? "");
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async (id: string) => {
+    setMsg("");
+    if (!editDate) {
+      setMsg("Indica una fecha");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await apiAuth(`/board/reservations/${id}`, "PATCH", {
+        date: editDate,
+        peopleCount: editPeopleCount ? Number(editPeopleCount) : undefined,
+        note: editNote.trim() || undefined,
+      });
+      setMsg("Reservación actualizada ✅");
+      setEditingId(null);
+      await loadMine();
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -410,42 +449,123 @@ export default function ReservasCondomino() {
             <View style={{ gap: 6 }}>
               {myReservations.map((r) => {
                 const isFuture = r.date >= todayISO();
+                const isEditing = editingId === r.id;
                 return (
                   <View
                     key={r.id}
                     style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
                       borderWidth: 1,
                       borderColor: ui.borderSoft,
                       borderRadius: 10,
                       paddingHorizontal: 10,
                       paddingVertical: 8,
+                      gap: 8,
                       opacity: r.status === "CANCELLED" ? 0.5 : 1,
                     }}
                   >
-                    <View>
-                      <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700" }}>
-                        {amenityNameById[r.amenityId] ?? "Amenidad"} · {fmtDate(r.date)}
-                      </Text>
-                      <Text style={{ color: ui.textMuted, fontSize: 11 }}>
-                        {r.peopleCount ? `${r.peopleCount} persona(s) · ` : ""}
-                        {STATUS_LABEL[r.status] ?? r.status}
-                      </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <View>
+                        <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700" }}>
+                          {amenityNameById[r.amenityId] ?? "Amenidad"} · {fmtDate(r.date)}
+                        </Text>
+                        <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                          {r.peopleCount ? `${r.peopleCount} persona(s) · ` : ""}
+                          {STATUS_LABEL[r.status] ?? r.status}
+                        </Text>
+                      </View>
+                      {r.status === "CONFIRMED" && isFuture && !isEditing && (
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          <Pressable
+                            onPress={() => startEdit(r)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 999,
+                              backgroundColor: ui.primarySoft,
+                            }}
+                          >
+                            <Text style={{ color: ui.primary, fontSize: 11, fontWeight: "700" }}>Editar</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => cancelar(r.id)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 999,
+                              backgroundColor: "rgba(220,38,38,0.10)",
+                            }}
+                          >
+                            <Text style={{ color: ui.danger, fontSize: 11, fontWeight: "700" }}>Cancelar</Text>
+                          </Pressable>
+                        </View>
+                      )}
                     </View>
-                    {r.status === "CONFIRMED" && isFuture && (
-                      <Pressable
-                        onPress={() => cancelar(r.id)}
-                        style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
-                          borderRadius: 999,
-                          backgroundColor: "rgba(220,38,38,0.10)",
-                        }}
-                      >
-                        <Text style={{ color: ui.danger, fontSize: 11, fontWeight: "700" }}>Cancelar</Text>
-                      </Pressable>
+
+                    {isEditing && (
+                      <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: ui.borderSoft, paddingTop: 8 }}>
+                        <Field label="Fecha">
+                          <TextInput
+                            placeholder="YYYY-MM-DD"
+                            placeholderTextColor={ui.textMuted}
+                            value={editDate}
+                            onChangeText={setEditDate}
+                            style={inputStyle}
+                          />
+                        </Field>
+                        <Field label="Número de personas">
+                          <TextInput
+                            keyboardType="number-pad"
+                            value={editPeopleCount}
+                            onChangeText={setEditPeopleCount}
+                            style={inputStyle}
+                          />
+                        </Field>
+                        <Field label="Nota (opcional)">
+                          <TextInput
+                            placeholder="Ej. cumpleaños de mi hijo"
+                            placeholderTextColor={ui.textMuted}
+                            value={editNote}
+                            onChangeText={setEditNote}
+                            style={inputStyle}
+                          />
+                        </Field>
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                          <Pressable
+                            onPress={() => saveEdit(r.id)}
+                            disabled={savingEdit}
+                            style={{
+                              flex: 1,
+                              backgroundColor: savingEdit ? ui.borderSoft : ui.primary,
+                              paddingVertical: 10,
+                              borderRadius: 10,
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
+                              {savingEdit ? "Guardando…" : "Guardar cambios"}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={cancelEdit}
+                            disabled={savingEdit}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 10,
+                              borderRadius: 10,
+                              backgroundColor: ui.borderSoft,
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text style={{ color: ui.text, fontWeight: "700", fontSize: 13 }}>Cerrar</Text>
+                          </Pressable>
+                        </View>
+                      </View>
                     )}
                   </View>
                 );
