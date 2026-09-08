@@ -36,7 +36,7 @@ type CondoRow = {
     name: string;
     supervisor: string | null;
     status: "AL_DIA" | "ATENCION";
-    collectionPct: number | null;
+    pending: number;
 };
 
 type QuickViewRow = {
@@ -44,23 +44,20 @@ type QuickViewRow = {
     name: string;
     supervisor: string | null;
     status: "AL_DIA" | "ATENCION";
-    collectionPct: number | null;
+    pending: number;
 };
 
-type BoardCollection = {
+type BoardTaskStats = {
     boardId: string;
-    billed: number;
-    collected: number;
-    percentage: number;
+    open: number;
+    inProgress: number;
 };
 
-type SupervisorPortfolio = {
+type SupervisorWorkload = {
     userId: string;
     name: string;
     condos: number;
-    billed: number;
-    collected: number;
-    percentage: number;
+    pending: number;
 };
 
 const AVATAR_COLORS = ["#5B9EF9", "#F97362", "#4ADE80", "#C084FC", "#F1C84A"];
@@ -68,15 +65,6 @@ function avatarColorFor(seed: string) {
     let hash = 0;
     for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
     return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
-/** "$414k" / "$1.2M" — sin depender de Intl.NumberFormat({notation:"compact"}), que no es
- * confiable en todos los runtimes de React Native/Hermes. */
-function formatMoneyCompact(n: number) {
-    if (!isFinite(n) || n <= 0) return "$0";
-    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-    if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
-    return `$${Math.round(n)}`;
 }
 
 function MetricCard({
@@ -152,8 +140,7 @@ export default function CompanyHome() {
     const [boards, setBoards] = useState<Board[]>([]);
     const [operatorCount, setOperatorCount] = useState<number | null>(null);
     const [supervisorCount, setSupervisorCount] = useState<number | null>(null);
-    const [openTasksCount, setOpenTasksCount] = useState<number | null>(null);
-    const [collections, setCollections] = useState<BoardCollection[]>([]);
+    const [taskStatsByBoard, setTaskStatsByBoard] = useState<BoardTaskStats[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -162,37 +149,32 @@ export default function CompanyHome() {
             setLoading(true);
             try {
                 // Un SUPERVISOR solo ve sus propios condominios; ADMINISTRADOR/SUPERADMIN ven toda la empresa.
-                // Para "incidencias abiertas" no existe un filtro por lista de boards en el endpoint agregado
-                // de open-count, así que para supervisor usamos el desglose por board (rango amplio) y sumamos
-                // solo los boards que le corresponden.
-                const taskStatsUrl = isSupervisorView
-                    ? `/board/tasks/stats/by-board?orgId=${orgId}&from=2000-01-01&to=2100-01-01`
-                    : `/board/tasks/stats/open-count?orgId=${orgId}`;
+                // /board/tasks/stats/by-board devuelve el desglose por condominio de toda la org (sin filtro
+                // de boardId), así que se pide siempre igual y cada vista suma solo los boards que le tocan
+                // (boardList, más abajo, ya viene filtrado por rol).
+                const taskStatsUrl = `/board/tasks/stats/by-board?orgId=${orgId}&from=2000-01-01&to=2100-01-01`;
 
                 // Promise.allSettled (no Promise.all): si un endpoint todavía no está desplegado
-                // en el backend (p. ej. /billing/stats/collection-by-board, agregado en esta
-                // sesión), esa sección se queda vacía en vez de tumbar TODO el panel.
+                // en el backend, esa sección se queda vacía en vez de tumbar TODO el panel.
                 //
                 // IMPORTANTE: solo `boards` usa `apiAuth` (que desloguea automáticamente en
                 // 401/403 — comportamiento correcto cuando el token realmente expiró). Las
-                // otras 4 llamadas son métricas complementarias del dashboard: usan `api()`
+                // otras llamadas son métricas complementarias del dashboard: usan `api()`
                 // directo (sin el callback de auto-logout) para que un 401/403 puntual en
                 // una tarjeta secundaria no cierre la sesión de todo el panel.
-                const [boardsRes, operatorsRes, supervisorsRes, taskStatsRes, collectionsRes] =
+                const [boardsRes, operatorsRes, supervisorsRes, taskStatsRes] =
                     await Promise.allSettled([
                         apiAuth(`/board/boards?orgId=${orgId}&size=100`, "GET"),
                         api(`/user/users?orgId=${orgId}&role=OPERATIVO`, "GET", undefined, token ?? undefined),
                         api(`/user/users?orgId=${orgId}&role=SUPERVISOR`, "GET", undefined, token ?? undefined),
                         api(taskStatsUrl, "GET", undefined, token ?? undefined),
-                        api(`/billing/stats/collection-by-board?orgId=${orgId}`, "GET", undefined, token ?? undefined),
                     ]);
 
                 [
                     ["board/boards", boardsRes],
                     ["user/users?role=OPERATIVO", operatorsRes],
                     ["user/users?role=SUPERVISOR", supervisorsRes],
-                    ["board/tasks/stats", taskStatsRes],
-                    ["billing/stats/collection-by-board", collectionsRes],
+                    ["board/tasks/stats/by-board", taskStatsRes],
                 ].forEach(([label, res]: any) => {
                     if (res.status === "rejected") {
                         const status = res.reason?.status ?? "sin status";
@@ -207,7 +189,6 @@ export default function CompanyHome() {
                 const operatorsRaw = operatorsRes.status === "fulfilled" ? operatorsRes.value : null;
                 const supervisorsRaw = supervisorsRes.status === "fulfilled" ? supervisorsRes.value : null;
                 const taskStatsRaw = taskStatsRes.status === "fulfilled" ? taskStatsRes.value : null;
-                const collectionsRaw = collectionsRes.status === "fulfilled" ? collectionsRes.value : null;
 
                 const rawList: any[] = Array.isArray(boardsRaw) ? boardsRaw : boardsRaw?.content ?? [];
                 const boardList = rawList
@@ -225,21 +206,7 @@ export default function CompanyHome() {
                 );
                 setOperatorCount(Array.isArray(operatorsRaw) ? operatorsRaw.length : null);
                 setSupervisorCount(Array.isArray(supervisorsRaw) ? supervisorsRaw.length : null);
-
-                if (isSupervisorView) {
-                    const byBoard: any[] = Array.isArray(taskStatsRaw) ? taskStatsRaw : [];
-                    const scopedIds = new Set(boardList.map((b) => String(b.id)));
-                    const sum = byBoard
-                        .filter((r) => scopedIds.has(String(r.boardId)))
-                        .reduce((acc, r) => acc + (r.open ?? 0) + (r.inProgress ?? 0), 0);
-                    setOpenTasksCount(sum);
-                } else {
-                    setOpenTasksCount(
-                        typeof taskStatsRaw?.count === "number" ? taskStatsRaw.count : null
-                    );
-                }
-
-                setCollections(Array.isArray(collectionsRaw) ? collectionsRaw : []);
+                setTaskStatsByBoard(Array.isArray(taskStatsRaw) ? taskStatsRaw : []);
             } finally {
                 setLoading(false);
             }
@@ -249,17 +216,25 @@ export default function CompanyHome() {
     const displayName = (me as any)?.name ?? (me?.email ?? "").split("@")[0] ?? "";
 
     /**
-     * El "supervisor asignado" por condominio, el resumen de "Equipo activo",
-     * "Incidencias abiertas" (tareas OPEN/IN_PROGRESS vía
-     * /board/tasks/stats/open-count) y "Cobranza del mes" (cuotas de
-     * mantenimiento agregadas por condominio vía
-     * /billing/stats/collection-by-board) ya usan datos reales del backend.
+     * El "supervisor asignado" por condominio, el resumen de "Equipo activo" y
+     * "Incidencias abiertas" / "Tareas pendientes" (OPEN/IN_PROGRESS vía
+     * /board/tasks/stats/by-board) ya usan datos reales del backend.
      */
-    const collectionByBoardId = useMemo(() => {
-        const map = new Map<string, BoardCollection>();
-        for (const c of collections) map.set(c.boardId, c);
+    const taskStatsByBoardId = useMemo(() => {
+        const map = new Map<string, BoardTaskStats>();
+        for (const s of taskStatsByBoard) map.set(String(s.boardId), s);
         return map;
-    }, [collections]);
+    }, [taskStatsByBoard]);
+
+    function pendingForBoard(boardId: string) {
+        const s = taskStatsByBoardId.get(boardId);
+        return s ? (s.open ?? 0) + (s.inProgress ?? 0) : 0;
+    }
+
+    const openTasksCount = useMemo(
+        () => boards.reduce((sum, b) => sum + pendingForBoard(b.id), 0),
+        [boards, taskStatsByBoardId]
+    );
 
     const condoRows: CondoRow[] = useMemo(
         () =>
@@ -267,83 +242,56 @@ export default function CompanyHome() {
                 name: b.name,
                 supervisor: b.supervisorName ?? null,
                 status: b.supervisorName ? "AL_DIA" : "ATENCION",
-                collectionPct: collectionByBoardId.get(b.id)?.percentage ?? null,
+                pending: pendingForBoard(b.id),
             })),
-        [boards, collectionByBoardId]
+        [boards, taskStatsByBoardId]
     );
-
-    const cobranzaDelMes = useMemo(() => {
-        if (collections.length === 0) return "—";
-        const totalBilled = collections.reduce((sum, c) => sum + (c.billed ?? 0), 0);
-        const totalCollected = collections.reduce((sum, c) => sum + (c.collected ?? 0), 0);
-        if (totalBilled <= 0) return "—";
-        return `${Math.round((totalCollected / totalBilled) * 100)}%`;
-    }, [collections]);
 
     const sinSupervisorCount = boards.filter((b) => !b.supervisorName).length;
 
     /**
-     * "Supervisores y su cartera" (solo vista ADMINISTRADOR/SUPERADMIN): cobranza
-     * agregada por supervisor, sumando la cobranza de todos los condominios que
-     * tiene asignados. Se calcula en el frontend combinando `boards` (que ya trae
-     * supervisorUserId/supervisorName) con `collections` (cobranza por boardId de
-     * /billing/stats/collection-by-board) — no requiere un endpoint nuevo.
-     * NOTA: el "operadores" por cartera del mockup de Figma no se incluye todavía
-     * porque no existe una asignación operador↔condominio real en el modelo.
+     * "Tareas pendientes por supervisor" (solo vista ADMINISTRADOR/SUPERADMIN):
+     * suma de tareas OPEN/IN_PROGRESS de todos los condominios que tiene asignados
+     * cada supervisor. Se calcula en el frontend combinando `boards` (que ya trae
+     * supervisorUserId/supervisorName) con el desglose por condominio de
+     * /board/tasks/stats/by-board — no requiere un endpoint nuevo.
+     * Ordenado de mayor a menor carga pendiente, para resaltar primero al
+     * supervisor que necesita más atención.
      */
-    const supervisorPortfolios: SupervisorPortfolio[] = useMemo(() => {
-        const map = new Map<string, SupervisorPortfolio>();
+    const supervisorWorkloads: SupervisorWorkload[] = useMemo(() => {
+        const map = new Map<string, SupervisorWorkload>();
         for (const b of boards) {
             if (!b.supervisorUserId) continue;
             const existing = map.get(b.supervisorUserId) ?? {
                 userId: b.supervisorUserId,
                 name: b.supervisorName ?? "Supervisor",
                 condos: 0,
-                billed: 0,
-                collected: 0,
-                percentage: 0,
+                pending: 0,
             };
             existing.condos += 1;
-            const c = collectionByBoardId.get(b.id);
-            if (c) {
-                existing.billed += c.billed ?? 0;
-                existing.collected += c.collected ?? 0;
-            }
+            existing.pending += pendingForBoard(b.id);
             map.set(b.supervisorUserId, existing);
         }
-        return Array.from(map.values())
-            .map((s) => ({
-                ...s,
-                percentage: s.billed > 0 ? Math.round((s.collected / s.billed) * 100) : 0,
-            }))
-            .sort((a, b) => b.condos - a.condos);
-    }, [boards, collectionByBoardId]);
-
-    const ingresosDelMes = useMemo(
-        () => formatMoneyCompact(collections.reduce((sum, c) => sum + (c.collected ?? 0), 0)),
-        [collections]
-    );
+        return Array.from(map.values()).sort((a, b) => b.pending - a.pending || b.condos - a.condos);
+    }, [boards, taskStatsByBoardId]);
 
     /** Alerta de la columna derecha del Panel General: prioriza condominios sin
-     * supervisor asignado; si todos tienen supervisor, avisa de la cartera con
-     * menor cobranza del mes (umbral: <80%). */
+     * supervisor asignado; si todos tienen supervisor, avisa del supervisor con
+     * más tareas pendientes acumuladas (umbral: 5 o más). */
     const alertBanner = useMemo(() => {
         if (sinSupervisorCount > 0) {
             return { type: "sin_supervisor" as const, count: sinSupervisorCount };
         }
-        const withBilling = supervisorPortfolios.filter((s) => s.billed > 0);
-        if (withBilling.length > 0) {
-            const lowest = withBilling.reduce((min, s) => (s.percentage < min.percentage ? s : min));
-            if (lowest.percentage < 80) {
-                return { type: "low_collection" as const, name: lowest.name, percentage: lowest.percentage };
-            }
+        const highest = supervisorWorkloads[0];
+        if (highest && highest.pending >= 5) {
+            return { type: "high_pending" as const, name: highest.name, pending: highest.pending };
         }
         return null;
-    }, [sinSupervisorCount, supervisorPortfolios]);
+    }, [sinSupervisorCount, supervisorWorkloads]);
 
     /** "Condominios (vista rápida)" del Panel General: todos los condominios
-     * activos con su supervisor y cobranza, ordenados para resaltar primero los
-     * que necesitan atención (menor % de cobranza primero). */
+     * activos con su supervisor y tareas pendientes, ordenados para resaltar
+     * primero los que necesitan más atención (mayor número de pendientes primero). */
     const quickViewRows: QuickViewRow[] = useMemo(
         () =>
             boards
@@ -352,11 +300,11 @@ export default function CompanyHome() {
                     name: b.name,
                     supervisor: b.supervisorName ?? null,
                     status: (b.supervisorName ? "AL_DIA" : "ATENCION") as "AL_DIA" | "ATENCION",
-                    collectionPct: collectionByBoardId.get(b.id)?.percentage ?? null,
+                    pending: pendingForBoard(b.id),
                 }))
-                .sort((a, b) => (a.collectionPct ?? -1) - (b.collectionPct ?? -1))
+                .sort((a, b) => b.pending - a.pending)
                 .slice(0, 8),
-        [boards, collectionByBoardId]
+        [boards, taskStatsByBoardId]
     );
 
     return (
@@ -415,11 +363,7 @@ export default function CompanyHome() {
                     <>
                         <MetricCard label="Condominios activos" value={String(boards.length)} tone="purple" />
                         <MetricCard label="Operadores" value={operatorCount != null ? String(operatorCount) : "—"} />
-                        <MetricCard
-                            label="Incidencias abiertas"
-                            value={openTasksCount != null ? String(openTasksCount) : "—"}
-                        />
-                        <MetricCard label="Cobranza del mes" value={cobranzaDelMes} />
+                        <MetricCard label="Incidencias abiertas" value={String(openTasksCount)} />
                     </>
                 ) : (
                     <>
@@ -429,8 +373,7 @@ export default function CompanyHome() {
                             value={supervisorCount != null ? String(supervisorCount) : "—"}
                         />
                         <MetricCard label="Operadores" value={operatorCount != null ? String(operatorCount) : "—"} />
-                        <MetricCard label="Cobranza Total" value={cobranzaDelMes} />
-                        <MetricCard label="Ingresos del mes" value={ingresosDelMes} />
+                        <MetricCard label="Tareas pendientes" value={String(openTasksCount)} />
                     </>
                 )}
             </View>
@@ -438,7 +381,7 @@ export default function CompanyHome() {
             {loading ? (
                 <ActivityIndicator color={ui.purple} style={{ marginTop: 20 }} />
             ) : isSupervisorView ? (
-                // ============ Vista SUPERVISOR (sin cambios) ============
+                // ============ Vista SUPERVISOR ============
                 <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
                     <View style={{ flex: 1, minWidth: 300, gap: 12 }}>
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -501,8 +444,7 @@ export default function CompanyHome() {
                                         {row.supervisor ? `Supervisor: ${row.supervisor}` : "Sin supervisor asignado"}
                                     </Text>
                                     <Text style={{ color: ui.textGray, fontSize: 11, marginTop: 1 }}>
-                                        Cobranza del mes:{" "}
-                                        {row.collectionPct != null ? `${Math.round(row.collectionPct)}%` : "—"}
+                                        Tareas pendientes: {row.pending}
                                     </Text>
                                 </View>
                                 <StatusChip status={row.status} />
@@ -518,14 +460,14 @@ export default function CompanyHome() {
                         <View style={{ flex: 2, minWidth: 320, gap: 12 }}>
                             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                                 <Text style={{ color: ui.textDark, fontSize: 15, fontWeight: "800" }}>
-                                    Supervisores y su cartera
+                                    Tareas pendientes por supervisor
                                 </Text>
                                 <Pressable onPress={() => router.push("/(company)/users")}>
                                     <Text style={{ color: ui.purple, fontSize: 13, fontWeight: "700" }}>Ver todos</Text>
                                 </Pressable>
                             </View>
 
-                            {supervisorPortfolios.length === 0 && !loading && (
+                            {supervisorWorkloads.length === 0 && !loading && (
                                 <View
                                     style={{
                                         backgroundColor: ui.card,
@@ -541,7 +483,7 @@ export default function CompanyHome() {
                                 </View>
                             )}
 
-                            {supervisorPortfolios.map((s) => (
+                            {supervisorWorkloads.map((s) => (
                                 <Pressable
                                     key={s.userId}
                                     onPress={() => router.push("/(company)/boards")}
@@ -583,17 +525,17 @@ export default function CompanyHome() {
                                             paddingHorizontal: 10,
                                             paddingVertical: 4,
                                             borderRadius: 999,
-                                            backgroundColor: s.percentage >= 80 ? ui.greenSoft : ui.orangeSoft,
+                                            backgroundColor: s.pending === 0 ? ui.greenSoft : ui.orangeSoft,
                                         }}
                                     >
                                         <Text
                                             style={{
-                                                color: s.percentage >= 80 ? ui.green : ui.orange,
+                                                color: s.pending === 0 ? ui.green : ui.orange,
                                                 fontSize: 11,
                                                 fontWeight: "700",
                                             }}
                                         >
-                                            {s.percentage}% cobranza
+                                            {s.pending} pendiente{s.pending === 1 ? "" : "s"}
                                         </Text>
                                     </View>
                                 </Pressable>
@@ -619,7 +561,7 @@ export default function CompanyHome() {
                                     </Text>
                                 </View>
                             )}
-                            {alertBanner?.type === "low_collection" && (
+                            {alertBanner?.type === "high_pending" && (
                                 <View
                                     style={{
                                         flexDirection: "row",
@@ -631,8 +573,8 @@ export default function CompanyHome() {
                                 >
                                     <Ionicons name="warning-outline" size={18} color={ui.orange} />
                                     <Text style={{ color: "#8A4E12", fontSize: 12.5, flex: 1, lineHeight: 18 }}>
-                                        La cartera de <Text style={{ fontWeight: "800" }}>{alertBanner.name}</Text>{" "}
-                                        tiene la cobranza más baja del mes ({alertBanner.percentage}%).
+                                        <Text style={{ fontWeight: "800" }}>{alertBanner.name}</Text> tiene{" "}
+                                        {alertBanner.pending} tareas pendientes — la carga más alta del equipo.
                                     </Text>
                                 </View>
                             )}
@@ -682,7 +624,7 @@ export default function CompanyHome() {
                                     SUPERVISOR
                                 </Text>
                                 <Text style={{ flex: 1, color: ui.textGray, fontSize: 11, fontWeight: "700" }}>
-                                    COBRANZA
+                                    PENDIENTES
                                 </Text>
                                 <Text
                                     style={{
@@ -730,11 +672,10 @@ export default function CompanyHome() {
                                             flex: 1,
                                             fontSize: 12,
                                             fontWeight: "700",
-                                            color:
-                                                row.collectionPct != null && row.collectionPct < 80 ? ui.orange : ui.green,
+                                            color: row.pending > 0 ? ui.orange : ui.green,
                                         }}
                                     >
-                                        {row.collectionPct != null ? `${Math.round(row.collectionPct)}%` : "—"}
+                                        {row.pending}
                                     </Text>
                                     <View style={{ flex: 1, alignItems: "flex-end" }}>
                                         <StatusChip status={row.status} />

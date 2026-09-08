@@ -1290,6 +1290,54 @@ export default function BoardsCompany() {
                                   }
                               />
 
+                              <PillButton
+                                  label="Amenidades"
+                                  tone="secondary"
+                                  size="sm"
+                                  onPress={() =>
+                                      router.push({
+                                        pathname: "/(company)/board-amenities",
+                                        params: {
+                                          boardId: b.id,
+                                          orgId: b.orgId,
+                                          boardName: b.name,
+                                        },
+                                      })
+                                  }
+                              />
+
+                              <PillButton
+                                  label="Comunicados"
+                                  tone="secondary"
+                                  size="sm"
+                                  onPress={() =>
+                                      router.push({
+                                        pathname: "/(company)/board-announcements",
+                                        params: {
+                                          boardId: b.id,
+                                          orgId: b.orgId,
+                                          boardName: b.name,
+                                        },
+                                      })
+                                  }
+                              />
+
+                              <PillButton
+                                  label="Egresos"
+                                  tone="secondary"
+                                  size="sm"
+                                  onPress={() =>
+                                      router.push({
+                                        pathname: "/(company)/board-expenses",
+                                        params: {
+                                          boardId: b.id,
+                                          orgId: b.orgId,
+                                          boardName: b.name,
+                                        },
+                                      })
+                                  }
+                              />
+
                               {canCrudBoards && (
                                   <>
                                     <PillButton

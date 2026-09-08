@@ -29,30 +29,30 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 const condosLogo = require("../../assets/images/iconCondos.png");
 
-/* ======================= Theme estilo Lokaly ======================= */
+/* ======================= Theme: mismo look que (operator)/(condomino)/(company) ======================= */
 
 const lokalyTheme = {
-  bg: "#050509",
-  bgAlt: "#080812",
-  surface: "#101018",
-  surfaceSoft: "#171725",
-  border: "#262637",
-  borderSoft: "#202033",
-  primary: "#F4C15D",
-  primarySoft: "rgba(244, 193, 93, 0.14)",
-  danger: "#F87171",
-  text: "#F9FAFB",
-  textMuted: "#9CA3AF",
-  textSubtle: "#6B7280",
-  chipBg: "#111827",
-  chipBorder: "#1F2937",
+  bg: "#FBF1E1",
+  bgAlt: "#FFFFFF",
+  surface: "#FFFFFF",
+  surfaceSoft: "#FFFFFF",
+  border: "rgba(21,19,31,0.10)",
+  borderSoft: "rgba(21,19,31,0.08)",
+  primary: "#5B4CE0",
+  primarySoft: "rgba(91,76,224,0.10)",
+  danger: "#DC2626",
+  text: "#2B2B33",
+  textMuted: "#8A8A94",
+  textSubtle: "#8A8A94",
+  chipBg: "#F4F1FF",
+  chipBorder: "rgba(91,76,224,0.18)",
 
-  // 👇 NUEVO: tablero claro
-  boardBg: "#F9FAFB",
+  // tablero (columnas/tarjetas)
+  boardBg: "#F4F1EC",
   boardCard: "#FFFFFF",
-  boardBorder: "#E5E7EB",
-  boardText: "#111827",
-  boardTextMuted: "#6B7280",
+  boardBorder: "rgba(21,19,31,0.10)",
+  boardText: "#2B2B33",
+  boardTextMuted: "#8A8A94",
 };
 
 /* ======================= Tipos ======================= */
@@ -270,18 +270,18 @@ export default function OpsTasks() {
 
   const statusStyle: Record<TaskStatus, { bg: string; fg: string; title: string }> = {
     OPEN: {
-      bg: "#111827",
-      fg: "#60A5FA",
+      bg: "rgba(37,99,235,0.10)",
+      fg: "#2563EB",
       title: "Abiertas",
     },
     IN_PROGRESS: {
-      bg: "#1F2937",
-      fg: "#FACC15",
+      bg: "rgba(217,119,6,0.10)",
+      fg: "#D97706",
       title: "En progreso",
     },
     DONE: {
-      bg: "#022C22",
-      fg: "#6EE7B7",
+      bg: "rgba(22,163,74,0.10)",
+      fg: "#16A34A",
       title: "Completadas",
     },
   };
@@ -290,7 +290,7 @@ export default function OpsTasks() {
     Platform.OS === "web"
       ? {
         boxShadow:
-          "0 14px 30px rgba(0,0,0,0.45)",
+          "0 4px 14px rgba(21,19,31,0.08)",
       }
       : {};
 
@@ -390,7 +390,7 @@ export default function OpsTasks() {
     >
       <TopBar
         email={me?.email}
-        onMenu={() => router.push("/home")}
+        onMenu={() => router.push("/(operator)" as any)}
         onLogout={() => logout()}
       />
 
@@ -1477,7 +1477,7 @@ function StatusFilter({
         height: 40,
         minWidth: isMobile ? 180 : 220,
         justifyContent: "center",
-        backgroundColor: lokalyTheme.boardBorder,
+        backgroundColor: lokalyTheme.boardCard,
       }}
     >
       <Picker
@@ -1661,16 +1661,20 @@ if (Platform.OS === "web") {
           borderColor: lokalyTheme.borderSoft,
           paddingVertical: 16,
           paddingHorizontal: 18,
-          boxShadow: "0 24px 60px rgba(0,0,0,0.65)",
+          boxShadow: "0 10px 30px rgba(21,19,31,0.08)",
         } as any}
       >
+        {/* Si no caben las 3 columnas a su ancho mínimo, esta franja
+            scrollea horizontalmente en vez de desbordar la tarjeta (antes
+            se salía del contenedor y "Completadas" quedaba cortada). */}
+        <View style={fitMode ? undefined : ({ overflowX: "auto" } as any)}>
         <View
           style={{
             flexDirection: "row",
             gap: GAP,
             alignItems: "stretch",
-            justifyContent: fitMode ? "space-between" : "flex-start",
-            minWidth: rackMinWidth,
+            width: fitMode ? "100%" : undefined,
+            minWidth: fitMode ? undefined : rackMinWidth,
           }}
         >
           {Object.entries(byStatus).map(
@@ -1681,8 +1685,7 @@ if (Platform.OS === "web") {
                 <View
                   key={st}
                   style={{
-                    width: colW,
-                    flexShrink: 0,
+                    ...(fitMode ? { flex: 1, minWidth: 0 } : { width: colW, flexShrink: 0 }),
                     borderRadius: 18,
                     padding: 10,
                     backgroundColor: lokalyTheme.boardBg,
@@ -1752,7 +1755,7 @@ if (Platform.OS === "web") {
                           borderWidth: 1,
                           borderColor: lokalyTheme.boardBorder,
                           borderRadius: 14,
-                          backgroundColor: lokalyTheme.boardBorder,
+                          backgroundColor: lokalyTheme.boardCard,
                           padding: 10,
                           gap: 8,
                           ...cardShadow,
@@ -1942,20 +1945,20 @@ if (Platform.OS === "web") {
                                   gap: 6,
                                   backgroundColor:
                                     s === "DONE"
-                                      ? "rgba(16,185,129,0.13)"
+                                      ? "rgba(22,163,74,0.10)"
                                       : s === "IN_PROGRESS"
                                       ? lokalyTheme.primarySoft
-                                      : "#0B1120",
+                                      : "rgba(37,99,235,0.10)",
                                   borderRadius: 999,
                                   paddingVertical: 5,
                                   paddingHorizontal: 10,
                                   borderWidth: 1,
                                   borderColor:
                                     s === "DONE"
-                                      ? "rgba(34,197,94,0.6)"
+                                      ? "rgba(22,163,74,0.35)"
                                       : s === "IN_PROGRESS"
                                       ? lokalyTheme.primary
-                                      : lokalyTheme.borderSoft,
+                                      : "rgba(37,99,235,0.35)",
                                 }}
                               >
                                 <Text
@@ -1964,13 +1967,13 @@ if (Platform.OS === "web") {
                                     fontWeight: "600",
                                     color:
                                       s === "DONE"
-                                        ? "#4ADE80"
+                                        ? "#16A34A"
                                         : s === "IN_PROGRESS"
                                         ? lokalyTheme.primary
-                                        : "#E5E7EB",
+                                        : "#2563EB",
                                   }}
                                 >
-                                  {s}
+                                  {statusStyle[s].title}
                                 </Text>
                               </Pressable>
                             ))}
@@ -1983,7 +1986,7 @@ if (Platform.OS === "web") {
                         style={{
                           padding: 12,
                           borderRadius: 12,
-                          backgroundColor: "#020617",
+                          backgroundColor: "rgba(21,19,31,0.03)",
                           borderWidth: 1,
                           borderColor: lokalyTheme.borderSoft,
                         }}
@@ -2004,6 +2007,7 @@ if (Platform.OS === "web") {
               );
             }
           )}
+        </View>
         </View>
       </View>
     </View>
@@ -2112,7 +2116,7 @@ if (Platform.OS === "web") {
                           borderWidth: 1,
                           borderColor: lokalyTheme.boardBorder,
                           borderRadius: 14,
-                          backgroundColor: lokalyTheme.boardBorder,
+                          backgroundColor: lokalyTheme.boardCard,
                           padding: 10,
                           gap: 8,
                           ...cardShadow,
@@ -2302,20 +2306,20 @@ if (Platform.OS === "web") {
                                   gap: 6,
                                   backgroundColor:
                                     s === "DONE"
-                                      ? "rgba(16,185,129,0.13)"
+                                      ? "rgba(22,163,74,0.10)"
                                       : s === "IN_PROGRESS"
                                       ? lokalyTheme.primarySoft
-                                      : "#0B1120",
+                                      : "rgba(37,99,235,0.10)",
                                   borderRadius: 999,
                                   paddingVertical: 5,
                                   paddingHorizontal: 10,
                                   borderWidth: 1,
                                   borderColor:
                                     s === "DONE"
-                                      ? "rgba(34,197,94,0.6)"
+                                      ? "rgba(22,163,74,0.35)"
                                       : s === "IN_PROGRESS"
                                       ? lokalyTheme.primary
-                                      : lokalyTheme.borderSoft,
+                                      : "rgba(37,99,235,0.35)",
                                 }}
                               >
                                 <Text
@@ -2324,13 +2328,13 @@ if (Platform.OS === "web") {
                                     fontWeight: "600",
                                     color:
                                       s === "DONE"
-                                        ? "#4ADE80"
+                                        ? "#16A34A"
                                         : s === "IN_PROGRESS"
                                         ? lokalyTheme.primary
-                                        : "#E5E7EB",
+                                        : "#2563EB",
                                   }}
                                 >
-                                  {s}
+                                  {statusStyle[s].title}
                                 </Text>
                               </Pressable>
                             ))}
@@ -2343,7 +2347,7 @@ if (Platform.OS === "web") {
                         style={{
                           padding: 12,
                           borderRadius: 12,
-                          backgroundColor: "#020617",
+                          backgroundColor: "rgba(21,19,31,0.03)",
                           borderWidth: 1,
                           borderColor: lokalyTheme.borderSoft,
                         }}
@@ -2390,7 +2394,7 @@ function TopBar({
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 18,
-        backgroundColor: "#020617",
+        backgroundColor: lokalyTheme.bgAlt,
         borderBottomWidth: 1,
         borderColor: lokalyTheme.border,
         ...(Platform.OS === "web"

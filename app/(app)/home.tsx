@@ -243,19 +243,38 @@ export default function Home() {
             </Section>
           </RoleGate>
 
-          {/* OPERATIVO */}
-          <RoleGate allow={["OPERATIVO"]} fallback={null}>
+          {/* CONDOMINO */}
+          <RoleGate allow={["CONDOMINO"]} fallback={null}>
             <Section
-              title="Panel operativo"
-              subtitle="Accesos directos a las tareas que tienes asignadas."
+              title="Mi condominio"
+              subtitle="Consulta tu unidad, tus cuotas y tus pagos."
             >
               <TileGrid
                 items={[
                   {
-                    label: "Mis tareas",
-                    description: "Tablero Kanban de tareas personales.",
+                    label: "Mi cuenta",
+                    description: "Estado de cuenta y pagos de tu unidad.",
+                    icon: "🏠",
+                    onPress: () => router.push("/(condomino)" as any),
+                  },
+                ]}
+              />
+            </Section>
+          </RoleGate>
+
+          {/* OPERATIVO */}
+          <RoleGate allow={["OPERATIVO"]} fallback={null}>
+            <Section
+              title="Panel operativo"
+              subtitle="Incidencias, pagos y accesos directos de tu día a día."
+            >
+              <TileGrid
+                items={[
+                  {
+                    label: "Mi panel",
+                    description: "Incidencias, pagos por registrar y cobranza.",
                     icon: "🛠️",
-                    onPress: () => router.push("/(ops)/tasks"),
+                    onPress: () => router.push("/(operator)" as any),
                   },
                 ]}
               />

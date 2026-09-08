@@ -126,10 +126,143 @@ export default function ReportsCompany() {
   const [dateFrom, setDateFrom] = useState(fmtDate(fromD));
   const [dateTo, setDateTo] = useState(fmtDate(today));
 
+  // ---- PERIODO (cobranza) ----
+  const currentPeriod = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+  const [period, setPeriod] = useState(currentPeriod);
+  const shiftPeriod = (delta: number) => {
+    const [y, m] = period.split("-").map(Number);
+    const d = new Date(y, (m - 1) + delta, 1);
+    setPeriod(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
   // ---- DATA ----
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReportRes | null>(null);
   const [error, setError] = useState<string>("");
+
+  // ---- COBRANZA DE MENSUALIDADES (billing-api, por colonia) ----
+  const [boardNames, setBoardNames] = useState<Record<string, string>>({});
+  const [collection, setCollection] = useState<
+    Array<{ boardId: string; billed: number; collected: number; percentage: number }>
+  >([]);
+  const [collectionLoading, setCollectionLoading] = useState(false);
+  const [collectionError, setCollectionError] = useState("");
+
+  const loadCollection = async () => {
+    if (!orgId) return;
+    setCollectionLoading(true);
+    setCollectionError("");
+    try {
+      const [boardsRaw, collectionRaw] = await Promise.all([
+        apiAuth(
+          `/board/boards?page=0&size=1000&orgId=${encodeURIComponent(orgId)}`,
+          "GET"
+        ),
+        apiAuth(
+          `/billing/stats/collection-by-board?orgId=${encodeURIComponent(
+            orgId
+          )}&period=${encodeURIComponent(period)}`,
+          "GET"
+        ),
+      ]);
+      const boardList = Array.isArray(boardsRaw) ? boardsRaw : boardsRaw?.content ?? [];
+      const names: Record<string, string> = {};
+      boardList.forEach((b: any) => {
+        names[String(b.id)] = String(b.name ?? b.id);
+      });
+      setBoardNames(names);
+
+      const rows = (Array.isArray(collectionRaw) ? collectionRaw : []).map(
+        (r: any) => ({
+          boardId: String(r.boardId),
+          billed: Number(r.billed ?? 0),
+          collected: Number(r.collected ?? 0),
+          percentage: Number(r.percentage ?? 0),
+        })
+      );
+      setCollection(rows);
+    } catch (e: any) {
+      setCollectionError(e?.message ?? "Error cargando cobranza");
+    } finally {
+      setCollectionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCollection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, period]);
+
+  // ---- GASTOS / EGRESOS (billing-api, por colonia) ----
+  const [expensesByBoard, setExpensesByBoard] = useState<
+    Array<{ boardId: string; totalExpenses: number }>
+  >([]);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+  const [expensesError, setExpensesError] = useState("");
+
+  const loadExpenses = async () => {
+    if (!orgId) return;
+    setExpensesLoading(true);
+    setExpensesError("");
+    try {
+      const raw = await apiAuth(
+        `/billing/stats/expenses-by-board?orgId=${encodeURIComponent(
+          orgId
+        )}&period=${encodeURIComponent(period)}`,
+        "GET"
+      );
+      const rows = (Array.isArray(raw) ? raw : []).map((r: any) => ({
+        boardId: String(r.boardId),
+        totalExpenses: Number(r.totalExpenses ?? 0),
+      }));
+      setExpensesByBoard(rows);
+    } catch (e: any) {
+      setExpensesError(e?.message ?? "Error cargando egresos");
+    } finally {
+      setExpensesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadExpenses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, period]);
+
+  const expensesTotal = useMemo(
+    () => expensesByBoard.reduce((s, r) => s + r.totalExpenses, 0),
+    [expensesByBoard]
+  );
+
+  const expensesByColonyResolved = useMemo(
+    () =>
+      expensesByBoard
+        .map((r) => ({ ...r, name: boardNames[r.boardId] ?? r.boardId }))
+        .sort((a, b) => b.totalExpenses - a.totalExpenses),
+    [expensesByBoard, boardNames]
+  );
+
+  const collectionTotals = useMemo(() => {
+    const billed = collection.reduce((s, r) => s + r.billed, 0);
+    const collected = collection.reduce((s, r) => s + r.collected, 0);
+    const percentage = billed > 0 ? Math.round((collected * 1000) / billed) / 10 : 0;
+    return { billed, collected, pending: billed - collected, percentage };
+  }, [collection]);
+
+  const collectionByColonyResolved = useMemo(
+    () =>
+      collection
+        .map((r) => ({ ...r, name: boardNames[r.boardId] ?? r.boardId }))
+        .sort((a, b) => a.percentage - b.percentage),
+    [collection, boardNames]
+  );
+
+  const netResult = collectionTotals.collected - expensesTotal;
+
+  const money = (n: number) =>
+    n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
   const load = async () => {
     if (!orgId) return;
@@ -535,6 +668,154 @@ export default function ReportsCompany() {
     </View>
   );
 
+  /* ====================== Cobranza de mensualidades ====================== */
+  const Collection = () => (
+    <View style={{ alignItems: "center" }}>
+      <View style={{ width: CONTAINER_W, gap: 12 }}>
+        <View
+          style={{
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "flex-start" : "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <Text style={{ color: C.text, fontSize: 16, fontWeight: "800" }}>
+            Cobranza de mensualidades
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Pill label="◀" onPress={() => shiftPeriod(-1)} />
+            <Chip text={period} />
+            <Pill label="▶" onPress={() => shiftPeriod(1)} />
+            {collectionLoading && <ActivityIndicator color={C.info} />}
+          </View>
+        </View>
+
+        {!!collectionError && (
+          <Text style={{ color: "#B91C1C", fontSize: 12 }}>{collectionError}</Text>
+        )}
+
+        {/* General (todas las colonias) */}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          <Kpi title="Facturado (general)" value={money(collectionTotals.billed)} tone="info" />
+          <Kpi title="Cobrado (general)" value={money(collectionTotals.collected)} tone="ok" />
+          <Kpi title="Pendiente (general)" value={money(collectionTotals.pending)} tone="warn" />
+          <Kpi
+            title="% de cobranza (general)"
+            value={`${collectionTotals.percentage}%`}
+            tone={collectionTotals.percentage >= 90 ? "ok" : "warn"}
+          />
+        </View>
+
+        {/* Por colonia */}
+        <View
+          style={{
+            backgroundColor: C.card,
+            borderWidth: 1,
+            borderColor: C.border,
+            borderRadius: 14,
+            padding: 14,
+            ...(isWeb
+              ? { boxShadow: "0 4px 14px rgba(21,19,31,0.06)" }
+              : { shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 12, elevation: 4 }),
+          }}
+        >
+          <Text style={{ color: C.text, fontWeight: "700", marginBottom: 10 }}>
+            Cobranza por colonia
+          </Text>
+          {collectionByColonyResolved.length === 0 ? (
+            <Text style={{ color: C.sub, fontSize: 12 }}>
+              Sin cargos registrados para este período.
+            </Text>
+          ) : (
+            collectionByColonyResolved.map((r) => (
+              <ProgressRow
+                key={r.boardId}
+                label={`${r.name} — ${money(r.collected)} / ${money(r.billed)}`}
+                value={r.percentage}
+              />
+            ))
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
+  /* ====================== Gastos / egresos ====================== */
+  const Expenses = () => (
+    <View style={{ alignItems: "center" }}>
+      <View style={{ width: CONTAINER_W, gap: 12 }}>
+        <View
+          style={{
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "flex-start" : "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <Text style={{ color: C.text, fontSize: 16, fontWeight: "800" }}>
+            Egresos y estado financiero
+          </Text>
+          {expensesLoading && <ActivityIndicator color={C.info} />}
+        </View>
+
+        {!!expensesError && (
+          <Text style={{ color: "#B91C1C", fontSize: 12 }}>{expensesError}</Text>
+        )}
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          <Kpi title="Cobrado (general)" value={money(collectionTotals.collected)} tone="ok" />
+          <Kpi title="Egresos (general)" value={money(expensesTotal)} tone="warn" />
+          <Kpi
+            title="Resultado neto"
+            value={money(netResult)}
+            tone={netResult >= 0 ? "ok" : "warn"}
+          />
+        </View>
+
+        <View
+          style={{
+            backgroundColor: C.card,
+            borderWidth: 1,
+            borderColor: C.border,
+            borderRadius: 14,
+            padding: 14,
+            ...(isWeb
+              ? { boxShadow: "0 4px 14px rgba(21,19,31,0.06)" }
+              : { shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 12, elevation: 4 }),
+          }}
+        >
+          <Text style={{ color: C.text, fontWeight: "700", marginBottom: 10 }}>
+            Egresos por colonia
+          </Text>
+          {expensesByColonyResolved.length === 0 ? (
+            <Text style={{ color: C.sub, fontSize: 12 }}>
+              Sin egresos registrados para este período.
+            </Text>
+          ) : (
+            expensesByColonyResolved.map((r) => (
+              <View
+                key={r.boardId}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  paddingVertical: 6,
+                  borderBottomWidth: 1,
+                  borderBottomColor: C.border,
+                }}
+              >
+                <Text style={{ color: C.text, fontSize: 13 }}>{r.name}</Text>
+                <Text style={{ color: C.text, fontSize: 13, fontWeight: "700" }}>
+                  {money(r.totalExpenses)}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
   const k = data?.kpis ?? {};
   const trend = data?.trend ?? {
     labels: [],
@@ -594,6 +875,10 @@ export default function ReportsCompany() {
       >
         <Header />
         <Filters />
+
+        <Collection />
+
+        <Expenses />
 
         <View style={{ alignItems: "center" }}>
           <View style={{ width: CONTAINER_W, padding: 16 }}>
@@ -1011,6 +1296,10 @@ export default function ReportsCompany() {
         }}
         keyboardShouldPersistTaps="handled"
       >
+        <Collection />
+
+        <Expenses />
+
         <View style={{ alignItems: "center" }}>
           <View style={{ width: CONTAINER_W, padding: 16 }}>
             {error

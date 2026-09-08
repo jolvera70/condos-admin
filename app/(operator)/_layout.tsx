@@ -1,19 +1,18 @@
-// app/(company)/_layout.tsx
+// app/(operator)/_layout.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Slot, usePathname, useRouter } from "expo-router";
 import React from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { Role, highestRoleInOrg } from "../../lib/rbac";
 import { useApp } from "../../lib/store";
 
-/* ============ Paleta clara (Figma: "Supervisor de empresa - dashboard") ============ */
+/* ============ Misma paleta clara que (company)/(condomino) ============ */
 const ui = {
   sidebar: "#7B70E8",
   sidebarActivePill: "#FFFFFF",
   sidebarActiveText: "#5B4CE0",
-  page: "#F4F1EC", // gris/beige claro detrás de la tarjeta
-  content: "#FBF1E1", // crema de la tarjeta principal
+  page: "#F4F1EC",
+  content: "#FBF1E1",
   textOnSidebar: "#FFFFFF",
   textOnSidebarMuted: "rgba(255,255,255,0.75)",
   yellow: "#F1E94A",
@@ -27,10 +26,13 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Inicio", route: "/(company)", icon: "home" },
-  { label: "Condominios", route: "/(company)/boards", icon: "business-outline" },
-  { label: "Operadores", route: "/(company)/users", icon: "people-outline" },
-  { label: "Reportes", route: "/(company)/reports", icon: "bar-chart-outline" },
+  { label: "Inicio", route: "/(operator)", icon: "home" },
+  { label: "Incidencias", route: "/(operator)/incidencias", icon: "alert-circle-outline" },
+  { label: "Pagos", route: "/(operator)/pagos", icon: "card-outline" },
+  { label: "Egresos", route: "/(operator)/egresos", icon: "wallet-outline" },
+  { label: "Comunicados", route: "/(operator)/comunicados", icon: "megaphone-outline" },
+  { label: "Reservas", route: "/(operator)/reservas", icon: "calendar-outline" },
+  { label: "Configuración", route: "/(operator)/configuracion", icon: "settings-outline" },
 ];
 
 function TokkoWordmark() {
@@ -57,31 +59,21 @@ function initialsAvatarColor(seed: string) {
   return ui.avatarColors[Math.abs(hash) % ui.avatarColors.length];
 }
 
-export default function CompanyLayout() {
+export default function OperatorLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const { me, logout } = useApp();
 
-  // orgId activo: por ahora se toma la primera org del usuario (igual que el resto de pantallas company).
-  const orgId = me?.orgs?.[0]?.orgId ?? "";
-  const myRole: Role = highestRoleInOrg(me, orgId);
-  const roleLabel =
-    myRole === "SUPERVISOR"
-      ? "Supervisor de empresa"
-      : myRole === "ADMINISTRADOR"
-      ? "Administrador de empresa"
-      : myRole === "SUPERADMIN"
-      ? "Superadmin"
-      : "Operador";
-
+  const roleLabel = "Operador";
   const displayName = (me as any)?.name ?? (me?.email ?? "").split("@")[0] ?? "";
   const initial = displayName.trim().charAt(0).toUpperCase() || "U";
 
   const isActive = (route: string) => {
-    if (route === "/(company)") {
-      return pathname === "/(company)" || pathname === "/" || pathname === "";
+    const path = route.replace("/(operator)", "").replace("/(ops)", "") || "/";
+    if (path === "/") {
+      return pathname === "/(operator)" || pathname === "/" || pathname === "";
     }
-    return pathname.startsWith(route.replace("/(company)", ""));
+    return pathname === path || pathname.startsWith(`${path}/`);
   };
 
   return (
@@ -157,8 +149,7 @@ export default function CompanyLayout() {
 
         {/* Pie: usuario activo + salir */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <Pressable
-            onPress={() => router.push("/(company)/users" as any)}
+          <View
             style={{
               flex: 1,
               flexDirection: "row",
@@ -180,17 +171,17 @@ export default function CompanyLayout() {
             >
               <Text style={{ color: "#1F2430", fontWeight: "800", fontSize: 13 }}>{initial}</Text>
             </View>
-            <Text
-              style={{ color: ui.textOnSidebar, fontSize: 13, fontWeight: "600" }}
-              numberOfLines={1}
-            >
-              {displayName}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={logout}
-            style={{ padding: 8, borderRadius: 8 }}
-          >
+            <View>
+              <Text
+                style={{ color: ui.textOnSidebar, fontSize: 13, fontWeight: "600" }}
+                numberOfLines={1}
+              >
+                {displayName}
+              </Text>
+              <Text style={{ color: ui.textOnSidebarMuted, fontSize: 10 }}>{roleLabel}</Text>
+            </View>
+          </View>
+          <Pressable onPress={logout} style={{ padding: 8, borderRadius: 8 }}>
             <Ionicons name="log-out-outline" size={18} color={ui.textOnSidebarMuted} />
           </Pressable>
         </View>
@@ -208,9 +199,9 @@ export default function CompanyLayout() {
             // vuelve a su "automatic minimum size" (se agranda al alto de su
             // contenido en vez de respetar flex:1), y el ScrollView de la
             // página deja de tener una altura acotada — o sea, deja de
-            // scrollear y el contenido se corta sin aviso. Cualquier menú
-            // desplegable de una página debe ir en <Modal>, no en una View
-            // position:absolute normal (esa sí se recortaría).
+            // scrollear y el contenido se corta sin aviso. Los menús
+            // desplegables de las páginas van en <Modal>, que no se recorta
+            // por esto.
             overflow: "hidden",
             ...(Platform.OS === "web"
               ? ({ boxShadow: "0 10px 30px rgba(21,19,31,0.08)" } as any)

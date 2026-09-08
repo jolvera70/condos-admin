@@ -1,23 +1,10 @@
 // app/_layout.tsx (extracto)
 import { AuthStorage } from "@/lib/auth";
 import { api } from "@/lib/api";
-import { highestRole } from "@/lib/roles";
+import { landingRouteFor } from "@/lib/roles";
 import { useApp } from "@/lib/store";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
-
-/**
- * A dónde mandar a alguien recién autenticado, según su rol más alto.
- * ADMINISTRADOR/SUPERVISOR ya tienen su propio dashboard (sidebar en
- * (company)). SUPERADMIN y OPERATIVO todavía no tienen uno dedicado, así
- * que siguen aterrizando en la pantalla genérica (app)/home — cuando se
- * les construya el suyo, se agrega aquí igual que se hizo para company.
- */
-function landingRouteFor(me: any): string {
-  const role = highestRole(me);
-  if (role === "ADMINISTRADOR" || role === "SUPERVISOR") return "/(company)";
-  return "/home";
-}
 
 export default function RootLayout() {
   const { token, me, setToken, setMe, logout } = useApp();

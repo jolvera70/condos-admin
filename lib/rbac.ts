@@ -1,11 +1,12 @@
 // lib/rbac.ts
-export type Role = "SUPERADMIN" | "ADMINISTRADOR" | "SUPERVISOR" | "OPERATIVO";
+export type Role = "SUPERADMIN" | "ADMINISTRADOR" | "SUPERVISOR" | "OPERATIVO" | "CONDOMINO";
 
 export const RANK: Record<Role, number> = {
-  SUPERADMIN: 3,
-  ADMINISTRADOR: 2,
-  SUPERVISOR: 1,
-  OPERATIVO: 0,
+  SUPERADMIN: 4,
+  ADMINISTRADOR: 3,
+  SUPERVISOR: 2,
+  OPERATIVO: 1,
+  CONDOMINO: 0,
 };
 
 /** Rol más alto del usuario en la org seleccionada; considera SUPERADMIN global. */
@@ -21,7 +22,7 @@ export function highestRoleInOrg(me: any, orgId: string): Role {
   const inOrg = me?.orgs?.find?.((o: any) => o?.orgId === orgId);
   const r = (inOrg?.role ?? "") as string;
 
-  if (r === "ADMINISTRADOR" || r === "SUPERVISOR" || r === "OPERATIVO") {
+  if (r === "ADMINISTRADOR" || r === "SUPERVISOR" || r === "OPERATIVO" || r === "CONDOMINO") {
     return r as Role;
   }
   return "OPERATIVO";
@@ -37,20 +38,20 @@ export function canManage(me: any, orgId: string, targetRole: Role): boolean {
 /** Opciones de rol que PUEDO asignar en esta org. */
 export function allowedRoleOptionsFor(me: any, orgId: string): Role[] {
   const mine = highestRoleInOrg(me, orgId);
-  if (mine === "SUPERADMIN") return ["ADMINISTRADOR", "SUPERVISOR", "OPERATIVO"];
-  if (mine === "ADMINISTRADOR") return ["SUPERVISOR", "OPERATIVO"];
-  if (mine === "SUPERVISOR") return ["OPERATIVO"];
+  if (mine === "SUPERADMIN") return ["ADMINISTRADOR", "SUPERVISOR", "OPERATIVO", "CONDOMINO"];
+  if (mine === "ADMINISTRADOR") return ["SUPERVISOR", "OPERATIVO", "CONDOMINO"];
+  if (mine === "SUPERVISOR") return ["OPERATIVO", "CONDOMINO"];
   return [];
 }
 
 /** Rol de un usuario objetivo en una org (útil para UI). */
 export function userRoleInOrg(user: { roles?: string[]; orgs?: Array<{ orgId: string; role: string }> }, orgId: string): Role {
   // Si tu backend alguna vez devuelve roles globales en `roles`, toma el primero válido
-  const global = (user?.roles ?? []).find(r => r === "SUPERADMIN" || r === "ADMINISTRADOR" || r === "SUPERVISOR" || r === "OPERATIVO");
+  const global = (user?.roles ?? []).find(r => r === "SUPERADMIN" || r === "ADMINISTRADOR" || r === "SUPERVISOR" || r === "OPERATIVO" || r === "CONDOMINO");
   if (global) return global as Role;
 
   const inOrg = user?.orgs?.find?.(o => o.orgId === orgId)?.role as string | undefined;
-  if (inOrg === "SUPERADMIN" || inOrg === "ADMINISTRADOR" || inOrg === "SUPERVISOR" || inOrg === "OPERATIVO") {
+  if (inOrg === "SUPERADMIN" || inOrg === "ADMINISTRADOR" || inOrg === "SUPERVISOR" || inOrg === "OPERATIVO" || inOrg === "CONDOMINO") {
     return inOrg as Role;
   }
   return "OPERATIVO";

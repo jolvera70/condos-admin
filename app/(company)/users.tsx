@@ -55,6 +55,10 @@ const STATUS_OPTS: Status[] = ["ACTIVE", "SUSPENDED"];
 
 type StatusFilter = "ALL" | "ACTIVE" | "SUSPENDED" | "ARCHIVED";
 
+/** Separa el personal de la empresa (staff) de los condóminos: no deben mezclarse. */
+type RoleGroup = "STAFF" | "CONDOMINO";
+const isStaffRole = (r: string) => r !== "CONDOMINO";
+
 /* ================== Breakpoints ================== */
 const useBreakpoints = () => {
   const { width } = useWindowDimensions();
@@ -233,6 +237,7 @@ function RoleBadge({ role }: { role: Role }) {
     ADMINISTRADOR: { bg: "rgba(37,99,235,0.12)", fg: "#1D4ED8" },
     SUPERVISOR: { bg: "rgba(217,119,6,0.14)", fg: "#A16207" },
     OPERATIVO: { bg: "rgba(13,148,136,0.12)", fg: "#0F766E" },
+    CONDOMINO: { bg: "rgba(91,76,224,0.12)", fg: "#5B4CE0" },
   };
   const { bg, fg } = palette[role] ?? { bg: ui.bgSoft, fg: ui.text };
   return (
@@ -358,10 +363,21 @@ export default function UsersCompany() {
   const [orgId, setOrgId] = useState("");
   const [users, setUsers] = useState<UserItem[]>([]);
   const [msg, setMsg] = useState("");
+
+  // Colonias (boards) del org, y a qué colonia/unidad pertenece cada condómino
+  // (residentUserId -> unidad). Los condóminos de colonias distintas no deben
+  // listarse juntos.
+  const NO_BOARD = "__sin_colonia__";
+  const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
+  const [boardFilter, setBoardFilter] = useState<string>("");
+  const [unitByUserId, setUnitByUserId] = useState<
+    Record<string, { boardId: string; boardName: string; identifier: string }>
+  >({});
   const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [roleGroup, setRoleGroup] = useState<RoleGroup>("STAFF");
 
   /* ------- cargar tenants ------- */
   async function fetchTenantsByIds(ids: string[]) {
@@ -436,15 +452,82 @@ export default function UsersCompany() {
     loadUsers();
   }, [orgId]);
 
+  /* ------- cargar colonias (boards) y a qué unidad pertenece cada condómino ------- */
+  const loadBoardsAndUnits = async () => {
+    if (!orgId) {
+      setBoards([]);
+      setUnitByUserId({});
+      return;
+    }
+    try {
+      const rawBoards = await apiAuth(
+        `/board/boards?page=0&size=1000&orgId=${encodeURIComponent(orgId)}`,
+        "GET"
+      );
+      const boardList: { id: string; name: string }[] = (
+        Array.isArray(rawBoards) ? rawBoards : rawBoards?.content ?? []
+      ).map((b: any) => ({ id: String(b.id), name: String(b.name ?? b.id) }));
+      setBoards(boardList);
+
+      const perBoardUnits = await Promise.all(
+        boardList.map((b) =>
+          apiAuth(
+            `/board/boards/${b.id}/units?includeInactive=true&size=1000`,
+            "GET"
+          )
+            .then((raw) => (Array.isArray(raw) ? raw : raw?.content ?? []))
+            .catch(() => [])
+        )
+      );
+
+      const map: Record<
+        string,
+        { boardId: string; boardName: string; identifier: string }
+      > = {};
+      boardList.forEach((b, i) => {
+        for (const u of perBoardUnits[i] ?? []) {
+          if (u.residentUserId) {
+            map[String(u.residentUserId)] = {
+              boardId: b.id,
+              boardName: b.name,
+              identifier: String(u.identifier ?? ""),
+            };
+          }
+        }
+      });
+      setUnitByUserId(map);
+    } catch {
+      setBoards([]);
+      setUnitByUserId({});
+    }
+  };
+  useEffect(() => {
+    setBoardFilter("");
+    loadBoardsAndUnits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
+
+  // Nunca mostrar condóminos de "todas las colonias" mezclados: en cuanto se
+  // conocen las colonias del org, se deja seleccionada la primera.
+  useEffect(() => {
+    if (roleGroup !== "CONDOMINO") return;
+    const stillValid =
+      boardFilter === NO_BOARD || boards.some((b) => b.id === boardFilter);
+    if (!stillValid) setBoardFilter(boards[0]?.id ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleGroup, boards]);
+
   /* ------- helpers rol/estado ------- */
   const myRoleInOrg = useMemo<Role>(
     () => highestRoleInOrg(me, orgId),
     [me, orgId]
   );
-  const createRoleOptions = useMemo<Role[]>(
-    () => allowedRoleOptionsFor(me, orgId),
-    [me, orgId]
-  );
+  const createRoleOptions = useMemo<Role[]>(() => {
+    const allowed = allowedRoleOptionsFor(me, orgId);
+    return roleGroup === "CONDOMINO"
+      ? allowed.filter((r) => r === "CONDOMINO")
+      : allowed.filter(isStaffRole);
+  }, [me, orgId, roleGroup]);
   const canManageUsers =
     myRoleInOrg === "SUPERADMIN" || myRoleInOrg === "ADMINISTRADOR";
   const roleForOrg = (u: UserItem, org: string): Role => {
@@ -456,7 +539,8 @@ export default function UsersCompany() {
       r === "SUPERADMIN" ||
       r === "ADMINISTRADOR" ||
       r === "SUPERVISOR" ||
-      r === "OPERATIVO"
+      r === "OPERATIVO" ||
+      r === "CONDOMINO"
     )
       return r as Role;
     return "OPERATIVO";
@@ -610,18 +694,41 @@ export default function UsersCompany() {
     }
   };
 
-  /* ------- métricas y filtros en memoria ------- */
-  const totalUsers = users.length;
-  const activeCount = users.filter(
+  const currentBoardLabel =
+    boardFilter === NO_BOARD
+      ? "Sin colonia asignada"
+      : boards.find((b) => b.id === boardFilter)?.name;
+
+  /* ------- separación personal vs condóminos, y por colonia ------- */
+  // El personal (SUPERADMIN/ADMINISTRADOR/SUPERVISOR/OPERATIVO) y los
+  // condóminos son audiencias distintas: nunca deben listarse juntos. Y los
+  // condóminos, además, pertenecen a una colonia (board) específica: tampoco
+  // deben mezclarse entre colonias.
+  const usersInGroup = useMemo(
+    () =>
+      users.filter((u) => {
+        const role = roleForOrg(u, orgId);
+        if (roleGroup !== "CONDOMINO") return isStaffRole(role);
+        if (role !== "CONDOMINO") return false;
+        if (!boardFilter) return true;
+        const unit = unitByUserId[u.id];
+        return boardFilter === NO_BOARD ? !unit : unit?.boardId === boardFilter;
+      }),
+    [users, orgId, roleGroup, boardFilter, unitByUserId]
+  );
+
+  /* ------- métricas y filtros en memoria (del grupo activo) ------- */
+  const totalUsers = usersInGroup.length;
+  const activeCount = usersInGroup.filter(
     (u) => statusForOrg(u, orgId) === "ACTIVE"
   ).length;
-  const suspendedCount = users.filter(
+  const suspendedCount = usersInGroup.filter(
     (u) => statusForOrg(u, orgId) === "SUSPENDED"
   ).length;
 
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return users.filter((u) => {
+    return usersInGroup.filter((u) => {
       const status = statusForOrg(u, orgId);
 
       if (statusFilter !== "ALL" && status !== statusFilter) {
@@ -638,7 +745,7 @@ export default function UsersCompany() {
         email.includes(term)
       );
     });
-  }, [users, orgId, search, statusFilter]);
+  }, [usersInGroup, orgId, search, statusFilter]);
 
   /* ------- estilos ------- */
   const cardBase = {
@@ -710,10 +817,12 @@ export default function UsersCompany() {
                     color: ui.text,
                   }}
                 >
-                  Usuarios de la empresa
+                  {roleGroup === "CONDOMINO" ? "Condóminos" : "Usuarios de la empresa"}
                 </Text>
                 <Text style={{ fontSize: 12, color: ui.textMuted }}>
-                  Administra accesos y permisos por organización.
+                  {roleGroup === "CONDOMINO"
+                    ? "Cuentas de acceso de los residentes/propietarios de una unidad."
+                    : "Administra accesos y permisos del personal (administradores, supervisores y operativos)."}
                 </Text>
               </View>
               <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
@@ -729,6 +838,78 @@ export default function UsersCompany() {
                 />
               </View>
             </View>
+
+            {/* Personal vs Condóminos: audiencias distintas, nunca mezcladas */}
+            <View
+              style={{
+                flexDirection: "row",
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: ui.border,
+                overflow: "hidden",
+                alignSelf: "flex-start",
+              }}
+            >
+              {(
+                [
+                  { key: "STAFF" as RoleGroup, label: "Personal (empresa)" },
+                  { key: "CONDOMINO" as RoleGroup, label: "Condóminos" },
+                ]
+              ).map(({ key, label }) => {
+                const isActive = roleGroup === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => {
+                      setRoleGroup(key);
+                      setStatusFilter("ALL");
+                      setSearch("");
+                      setShowCreate(false);
+                    }}
+                    style={({ pressed }) => ({
+                      paddingVertical: 9,
+                      paddingHorizontal: 16,
+                      backgroundColor: isActive ? ui.primary : ui.bgSoft,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: isActive ? "#FFFFFF" : ui.textMuted,
+                        fontSize: 12,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Colonia: los condóminos siempre se ven de una colonia a la vez, nunca mezclados */}
+            {roleGroup === "CONDOMINO" && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ fontSize: 12, color: ui.textMuted, fontWeight: "600" }}>
+                  Colonia:
+                </Text>
+                {boards.length === 0 ? (
+                  <Text style={{ fontSize: 12, color: ui.textMuted }}>
+                    Esta empresa todavía no tiene colonias registradas.
+                  </Text>
+                ) : (
+                  <Select
+                    value={boardFilter || boards[0]?.id || ""}
+                    onChange={(v) => setBoardFilter(v)}
+                    options={[
+                      ...boards.map((b) => ({ label: b.name, value: b.id })),
+                      { label: "Sin colonia asignada", value: NO_BOARD },
+                    ]}
+                    minWidth={200}
+                  />
+                )}
+              </View>
+            )}
 
             {/* Métricas */}
             <View
@@ -878,8 +1059,16 @@ export default function UsersCompany() {
                         color: ui.text,
                       }}
                     >
-                      Crear nuevo usuario
+                      {roleGroup === "CONDOMINO" ? "Crear condómino" : "Crear nuevo usuario"}
                     </Text>
+                    {roleGroup === "CONDOMINO" && (
+                      <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                        Recomendado: crea el acceso del condómino directamente
+                        desde Condominios → Unidades, ahí queda enlazado a su
+                        casa/depto. Aquí solo se crea la cuenta, sin unidad
+                        asignada.
+                      </Text>
+                    )}
                     <TextInput
                       placeholder="Nombre"
                       placeholderTextColor={ui.textMuted}
@@ -916,7 +1105,7 @@ export default function UsersCompany() {
                       onChange={(v) =>
                         setNewUser((u) => ({ ...u, role: v }))
                       }
-                      options={allowedRoleOptionsFor(me, orgId).map((r) => ({
+                      options={createRoleOptions.map((r) => ({
                         label: r,
                         value: r,
                       }))}
@@ -949,10 +1138,13 @@ export default function UsersCompany() {
                 >
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={{ fontWeight: "800", color: ui.text }}>
-                      Usuarios de{" "}
+                      {roleGroup === "CONDOMINO" ? "Condóminos de" : "Personal de"}{" "}
                       {orgs.find((o) => o.orgId === orgId)?.name ||
                         orgId ||
                         "..."}
+                      {roleGroup === "CONDOMINO" && currentBoardLabel
+                        ? ` · ${currentBoardLabel}`
+                        : ""}
                     </Text>
                     <Text
                       style={{
@@ -1045,6 +1237,16 @@ export default function UsersCompany() {
                         >
                           {u.email}
                         </Text>
+                        {roleGroup === "CONDOMINO" && (
+                          <Text
+                            style={{ color: ui.primary, fontSize: 11, fontWeight: "600" }}
+                            numberOfLines={1}
+                          >
+                            {unitByUserId[u.id]
+                              ? `${unitByUserId[u.id].boardName} · ${unitByUserId[u.id].identifier}`
+                              : "Sin unidad asignada"}
+                          </Text>
+                        )}
                       </View>
 
                       <View
@@ -1080,9 +1282,10 @@ export default function UsersCompany() {
                         <Select
                           value={role}
                           onChange={(v) => changeRole(u, v as Role)}
-                          options={allowedRoleOptionsFor(me, orgId).map(
-                            (r) => ({ label: r, value: r })
-                          )}
+                          options={createRoleOptions.map((r) => ({
+                            label: r,
+                            value: r,
+                          }))}
                           minWidth={200}
                           disabled={!canManageUsers}
                         />

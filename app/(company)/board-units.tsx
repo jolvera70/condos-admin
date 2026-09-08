@@ -42,6 +42,7 @@ type Unit = {
   ownerName?: string;
   residentUserId?: string;
   coefficient?: number;
+  committeeMember?: boolean;
   status: UnitStatus;
   createdAt?: string;
   updatedAt?: string;
@@ -90,6 +91,39 @@ function PillButton({
   );
 }
 
+function Checkbox({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <Pressable
+      onPress={() => onChange(!value)}
+      style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 }}
+    >
+      <View
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 5,
+          borderWidth: 1.5,
+          borderColor: value ? ui.primary : ui.border,
+          backgroundColor: value ? ui.primary : "transparent",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {value && <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "800" }}>✓</Text>}
+      </View>
+      <Text style={{ color: ui.text, fontSize: 12 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function BoardUnitsScreen() {
   const router = useRouter();
   const { me, token } = useApp();
@@ -119,11 +153,18 @@ export default function BoardUnitsScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [identifier, setIdentifier] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [residentEmail, setResidentEmail] = useState("");
+  const [residentPassword, setResidentPassword] = useState("");
+  const [committeeMember, setCommitteeMember] = useState(false);
 
   // editar
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editIdentifier, setEditIdentifier] = useState("");
   const [editOwnerName, setEditOwnerName] = useState("");
+  const [editResidentUserId, setEditResidentUserId] = useState<string | undefined>(undefined);
+  const [editResidentEmail, setEditResidentEmail] = useState("");
+  const [editResidentPassword, setEditResidentPassword] = useState("");
+  const [editCommitteeMember, setEditCommitteeMember] = useState(false);
 
   const loadUnits = useCallback(async () => {
     if (!boardId) return;
@@ -143,6 +184,7 @@ export default function BoardUnitsScreen() {
         ownerName: u.ownerName ?? undefined,
         residentUserId: u.residentUserId ?? undefined,
         coefficient: u.coefficient ?? undefined,
+        committeeMember: !!u.committeeMember,
         status: u.status as UnitStatus,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
@@ -159,21 +201,50 @@ export default function BoardUnitsScreen() {
     loadUnits();
   }, [loadUnits]);
 
+  // Crea (o falla si ya existe) la cuenta del condómino en user-api con rol
+  // CONDOMINO, y devuelve su id para enlazarlo como residentUserId de la unidad.
+  const provisionCondominoAccount = async (email: string, fullName: string, password: string) => {
+    const created = await apiAuth("/user/users", "POST", {
+      fullName: fullName || undefined,
+      email,
+      orgId,
+      role: "CONDOMINO",
+      status: "ACTIVE",
+      provisionAccount: true,
+      tempPassword: password,
+    });
+    return created?.id as string | undefined;
+  };
+
   const createUnit = async () => {
     if (!canCrudUnits) return;
     if (!identifier.trim()) {
       setMsg("Escribe un identificador (ej. Casa 12)");
       return;
     }
+    const email = residentEmail.trim().toLowerCase();
+    if (email && !residentPassword.trim()) {
+      setMsg("Escribe una contraseña temporal para el acceso del condómino");
+      return;
+    }
     try {
+      let residentUserId: string | undefined;
+      if (email) {
+        residentUserId = await provisionCondominoAccount(email, ownerName.trim(), residentPassword.trim());
+      }
       await apiAuth(`/board/boards/${boardId}/units`, "POST", {
         identifier: identifier.trim(),
         ownerName: ownerName.trim() || undefined,
+        residentUserId,
+        committeeMember: residentUserId ? committeeMember : false,
       });
       setIdentifier("");
       setOwnerName("");
+      setResidentEmail("");
+      setResidentPassword("");
+      setCommitteeMember(false);
       setShowCreate(false);
-      setMsg("Unidad creada ✅");
+      setMsg(email ? "Unidad creada y acceso del condómino habilitado ✅" : "Unidad creada ✅");
       await loadUnits();
     } catch (e: any) {
       setMsg(e.message ?? String(e));
@@ -184,17 +255,32 @@ export default function BoardUnitsScreen() {
     setEditingId(u.id);
     setEditIdentifier(u.identifier);
     setEditOwnerName(u.ownerName ?? "");
+    setEditResidentUserId(u.residentUserId);
+    setEditResidentEmail("");
+    setEditResidentPassword("");
+    setEditCommitteeMember(!!u.committeeMember);
   };
 
   const saveEdit = async () => {
     if (!editingId || !canCrudUnits) return;
+    const email = editResidentEmail.trim().toLowerCase();
+    if (email && !editResidentPassword.trim()) {
+      setMsg("Escribe una contraseña temporal para el acceso del condómino");
+      return;
+    }
     try {
+      let residentUserId = editResidentUserId;
+      if (email) {
+        residentUserId = await provisionCondominoAccount(email, editOwnerName.trim(), editResidentPassword.trim());
+      }
       await apiAuth(`/board/units/${editingId}`, "PUT", {
         identifier: editIdentifier.trim(),
         ownerName: editOwnerName.trim() || undefined,
+        residentUserId,
+        committeeMember: residentUserId ? editCommitteeMember : false,
       });
       setEditingId(null);
-      setMsg("Unidad actualizada ✅");
+      setMsg(email ? "Unidad actualizada y acceso del condómino habilitado ✅" : "Unidad actualizada ✅");
       await loadUnits();
     } catch (e: any) {
       setMsg(e.message ?? String(e));
@@ -318,6 +404,56 @@ export default function BoardUnitsScreen() {
               fontSize: 13,
             }}
           />
+
+          <Text style={{ color: ui.textMuted, fontSize: 11, marginTop: 4 }}>
+            Acceso del condómino (opcional): si capturas un correo, se crea su
+            cuenta para que pueda entrar a ver su unidad y sus cuotas/pagos.
+          </Text>
+          <TextInput
+            placeholder="Correo del condómino (opcional)"
+            placeholderTextColor={ui.textMuted}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={residentEmail}
+            onChangeText={setResidentEmail}
+            style={{
+              backgroundColor: ui.bg,
+              borderWidth: 1,
+              borderColor: ui.border,
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              color: ui.text,
+              fontSize: 13,
+            }}
+          />
+          {!!residentEmail.trim() && (
+            <TextInput
+              placeholder="Contraseña temporal para el condómino"
+              placeholderTextColor={ui.textMuted}
+              secureTextEntry
+              value={residentPassword}
+              onChangeText={setResidentPassword}
+              style={{
+                backgroundColor: ui.bg,
+                borderWidth: 1,
+                borderColor: ui.border,
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                color: ui.text,
+                fontSize: 13,
+              }}
+            />
+          )}
+          {!!residentEmail.trim() && (
+            <Checkbox
+              label="Es parte del comité de vigilancia de esta colonia"
+              value={committeeMember}
+              onChange={setCommitteeMember}
+            />
+          )}
+
           <View style={{ flexDirection: "row", gap: 8 }}>
             <PillButton label="Crear" size="sm" onPress={createUnit} />
             <PillButton
@@ -428,6 +564,58 @@ export default function BoardUnitsScreen() {
                         fontSize: 13,
                       }}
                     />
+                    {!editResidentUserId && (
+                      <>
+                        <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                          Esta unidad todavía no tiene acceso de condómino.
+                          Captura su correo para habilitarlo.
+                        </Text>
+                        <TextInput
+                          placeholder="Correo del condómino (opcional)"
+                          placeholderTextColor={ui.textMuted}
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                          value={editResidentEmail}
+                          onChangeText={setEditResidentEmail}
+                          style={{
+                            backgroundColor: ui.bg,
+                            borderWidth: 1,
+                            borderColor: ui.border,
+                            borderRadius: 8,
+                            paddingHorizontal: 10,
+                            paddingVertical: 8,
+                            color: ui.text,
+                            fontSize: 13,
+                          }}
+                        />
+                        {!!editResidentEmail.trim() && (
+                          <TextInput
+                            placeholder="Contraseña temporal para el condómino"
+                            placeholderTextColor={ui.textMuted}
+                            secureTextEntry
+                            value={editResidentPassword}
+                            onChangeText={setEditResidentPassword}
+                            style={{
+                              backgroundColor: ui.bg,
+                              borderWidth: 1,
+                              borderColor: ui.border,
+                              borderRadius: 8,
+                              paddingHorizontal: 10,
+                              paddingVertical: 8,
+                              color: ui.text,
+                              fontSize: 13,
+                            }}
+                          />
+                        )}
+                      </>
+                    )}
+                    {(!!editResidentUserId || !!editResidentEmail.trim()) && (
+                      <Checkbox
+                        label="Es parte del comité de vigilancia de esta colonia"
+                        value={editCommitteeMember}
+                        onChange={setEditCommitteeMember}
+                      />
+                    )}
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <PillButton label="Guardar" size="sm" onPress={saveEdit} />
                       <PillButton
@@ -475,6 +663,10 @@ export default function BoardUnitsScreen() {
                         Propietario: {item.ownerName}
                       </Text>
                     )}
+                    <Text style={{ color: item.residentUserId ? ui.primary : ui.textMuted, fontSize: 11 }}>
+                      {item.residentUserId ? "🔑 Con acceso de condómino" : "Sin acceso de condómino"}
+                      {item.residentUserId && item.committeeMember ? " · 🛡️ Comité de vigilancia" : ""}
+                    </Text>
                     {canCrudUnits && (
                       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
                         <PillButton

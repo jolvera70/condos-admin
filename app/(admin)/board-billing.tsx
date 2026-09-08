@@ -62,6 +62,7 @@ type Charge = {
   id: string;
   concept: string;
   amount: number;
+  paidAmount?: number;
   period?: string;
   dueDate?: string;
   status: ChargeStatus;
@@ -83,6 +84,7 @@ type AccountStatement = {
   totalCharged: number;
   totalPaid: number;
   balance: number;
+  creditBalance?: number;
   charges: Charge[];
   payments: Payment[];
 };
@@ -845,6 +847,14 @@ export default function BoardBillingAdminScreen() {
                         {money(statement.balance)}
                       </Text>
                     </View>
+                    {!!statement.creditBalance && statement.creditBalance > 0 && (
+                      <View>
+                        <Text style={{ color: ui.textMuted, fontSize: 10 }}>A FAVOR</Text>
+                        <Text style={{ color: ui.success, fontWeight: "800" }}>
+                          {money(statement.creditBalance)}
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {/* Cargos */}
@@ -877,6 +887,7 @@ export default function BoardBillingAdminScreen() {
                           </Text>
                           <Text style={{ color: ui.textMuted, fontSize: 10 }}>
                             {c.type === "EXTRAORDINARY" ? "Extraordinaria" : "Regular"}
+                            {c.status === "PARTIALLY_PAID" ? ` · pagado ${money(c.paidAmount)}` : ""}
                           </Text>
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
