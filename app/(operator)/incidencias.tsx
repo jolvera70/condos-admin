@@ -34,6 +34,7 @@ type Task = {
   title: string;
   description?: string;
   assigneeId?: string;
+  reportedBy?: string;
   status: string;
   createdAt?: string;
 };
@@ -73,6 +74,11 @@ export default function IncidenciasOperador() {
 
   const [recent, setRecent] = useState<Task[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
+
+  const [boardTasks, setBoardTasks] = useState<Task[]>([]);
+  const [loadingBoardTasks, setLoadingBoardTasks] = useState(false);
+  const [reassigningTaskId, setReassigningTaskId] = useState<string | null>(null);
+  const [savingAssignee, setSavingAssignee] = useState(false);
 
   useEffect(() => {
     if (!orgId) return;
@@ -132,6 +138,61 @@ export default function IncidenciasOperador() {
     loadRecent();
   }, [loadRecent]);
 
+  const loadBoardTasks = useCallback(async () => {
+    if (!boardId) return;
+    setLoadingBoardTasks(true);
+    try {
+      const raw = await apiAuth(`/board/boards/${boardId}/tasks?page=0&size=1000`, "GET");
+      const list = (Array.isArray(raw) ? raw : raw?.content ?? []).map((t: any) => ({
+        id: String(t.id),
+        boardId: String(t.boardId),
+        title: String(t.title ?? ""),
+        description: t.description,
+        assigneeId: t.assigneeId ? String(t.assigneeId) : undefined,
+        reportedBy: t.reportedBy ? String(t.reportedBy) : undefined,
+        status: t.status,
+        createdAt: t.createdAt,
+      }));
+      setBoardTasks(list);
+    } catch {
+      setBoardTasks([]);
+    } finally {
+      setLoadingBoardTasks(false);
+    }
+  }, [boardId]);
+
+  useEffect(() => {
+    loadBoardTasks();
+  }, [loadBoardTasks]);
+
+  const unassignedInBoard = boardTasks.filter(
+    (t) => !t.assigneeId && t.status !== "DONE" && t.status !== "CANCELED" && t.status !== "ARCHIVED"
+  );
+
+  const userLabel = (id?: string) => {
+    if (!id) return "—";
+    const u = users.find((u) => u.id === id);
+    return u ? u.label : id;
+  };
+
+  const reassign = async (t: Task, newAssigneeId: string) => {
+    setSavingAssignee(true);
+    setMsg("");
+    try {
+      await apiAuth(`/board/tasks/${t.id}`, "PUT", {
+        title: t.title,
+        description: t.description,
+        assigneeId: newAssigneeId,
+      });
+      setReassigningTaskId(null);
+      await loadBoardTasks();
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setSavingAssignee(false);
+    }
+  };
+
   const crear = async () => {
     setMsg("");
     if (!boardId) {
@@ -153,6 +214,7 @@ export default function IncidenciasOperador() {
       setDescription("");
       setMsg("Incidencia registrada ✅");
       await loadRecent();
+      await loadBoardTasks();
     } catch (e: any) {
       setMsg(e.message ?? String(e));
     } finally {
@@ -256,6 +318,74 @@ export default function IncidenciasOperador() {
               {submitting ? "Registrando…" : "Registrar incidencia"}
             </Text>
           </Pressable>
+        </Card>
+
+        <Card>
+          <Text style={{ fontWeight: "800", color: ui.text, fontSize: 14, marginBottom: 4 }}>
+            Sin asignar en esta colonia
+          </Text>
+          <Text style={{ color: ui.textMuted, fontSize: 12, marginBottom: 4 }}>
+            Incluye lo reportado por condóminos y por el personal. Asígnalas a ti o a otro
+            operador para empezar a atenderlas.
+          </Text>
+          {loadingBoardTasks ? (
+            <ActivityIndicator color={ui.primary} />
+          ) : unassignedInBoard.length === 0 ? (
+            <Text style={{ color: ui.textMuted, fontSize: 12 }}>
+              No hay incidencias sin asignar en esta colonia.
+            </Text>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {unassignedInBoard.map((t) => (
+                <View
+                  key={t.id}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: ui.borderSoft,
+                    borderRadius: 10,
+                    padding: 10,
+                    gap: 6,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                    <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700", flex: 1 }} numberOfLines={1}>
+                      {t.title}
+                    </Text>
+                    <Text style={{ color: ui.primary, fontSize: 11, fontWeight: "700" }}>
+                      {STATUS_LABEL[t.status] ?? t.status}
+                    </Text>
+                  </View>
+                  {!!t.reportedBy && (
+                    <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                      Reportada por: {userLabel(t.reportedBy)}
+                    </Text>
+                  )}
+                  {reassigningTaskId === t.id ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <Select
+                          value=""
+                          onChange={(v) => reassign(t, v)}
+                          options={users.map((u) => ({
+                            label: myId && u.id === String(myId) ? `${u.label} (yo)` : u.label,
+                            value: u.id,
+                          }))}
+                          placeholder="Elige a quién asignar"
+                        />
+                      </View>
+                      {savingAssignee && <ActivityIndicator size="small" color={ui.primary} />}
+                    </View>
+                  ) : (
+                    <Pressable onPress={() => setReassigningTaskId(t.id)}>
+                      <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                        Asignar
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
         </Card>
 
         <Card>
