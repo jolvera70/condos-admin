@@ -15,6 +15,7 @@ import {
   View,
   useWindowDimensions
 } from "react-native";
+import { AuthImgWeb } from "../../components/auth-media-web";
 import { apiAuth } from "../../lib/api";
 import { useApp } from "../../lib/store";
 const condosLogo = require("../../assets/images/iconCondos.png");
@@ -433,9 +434,21 @@ export default function BoardTasks() {
     [expandedAttachmentsId, attachmentsByTask]
   );
 
-  const openAttachment = (url: string) => {
-    if (Platform.OS === "web") {
-      window.open(url, "_blank");
+  const openAttachment = async (url: string) => {
+    if (Platform.OS !== "web") {
+      setMsg("Ver el archivo completo aún no está soportado desde el celular; ábrelo desde la versión web.");
+      return;
+    }
+    try {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`No se pudo abrir el archivo (${res.status})`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
     }
   };
 
@@ -1103,20 +1116,31 @@ export default function BoardTasks() {
                   </Text>
                 ) : (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {attachmentsByTask[t.id].map((a) => (
-                      <Pressable key={a.id} onPress={() => openAttachment(a.url)}>
-                        <Image
-                          source={{ uri: a.url }}
-                          style={{
-                            width: 84,
-                            height: 84,
-                            borderRadius: 8,
-                            backgroundColor: ui.primarySoft,
-                          }}
-                          resizeMode="cover"
-                        />
-                      </Pressable>
-                    ))}
+                    {attachmentsByTask[t.id].map((a) =>
+                      Platform.OS === "web" ? (
+                        <Pressable key={a.id} onPress={() => openAttachment(a.url)}>
+                          <AuthImgWeb
+                            url={a.url}
+                            width={84}
+                            height={84}
+                            style={{ borderRadius: 8, backgroundColor: ui.primarySoft }}
+                          />
+                        </Pressable>
+                      ) : (
+                        <Pressable key={a.id} onPress={() => openAttachment(a.url)}>
+                          <Image
+                            source={{ uri: a.url, headers: { Authorization: `Bearer ${token}` } }}
+                            style={{
+                              width: 84,
+                              height: 84,
+                              borderRadius: 8,
+                              backgroundColor: ui.primarySoft,
+                            }}
+                            resizeMode="cover"
+                          />
+                        </Pressable>
+                      )
+                    )}
                   </View>
                 )}
               </View>
