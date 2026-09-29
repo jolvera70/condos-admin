@@ -32,6 +32,7 @@ type Task = {
   title: string;
   description?: string;
   status: string;
+  dueDate?: string;
   createdAt?: string;
 };
 
@@ -76,6 +77,7 @@ export default function IncidenciasCondomino() {
 
   const [reported, setReported] = useState<Task[]>([]);
   const [loadingReported, setLoadingReported] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!unitId && units.length > 0) setUnitId(units[0].id);
@@ -96,6 +98,7 @@ export default function IncidenciasCondomino() {
         title: String(t.title ?? ""),
         description: t.description,
         status: t.status,
+        dueDate: t.dueDate,
         createdAt: t.createdAt,
       }));
       setReported(list);
@@ -329,26 +332,42 @@ export default function IncidenciasCondomino() {
                 <Text style={{ color: ui.textMuted, fontSize: 12 }}>Todavía no has reportado ninguna.</Text>
               ) : (
                 <View style={{ gap: 6 }}>
-                  {reported.map((t) => (
-                    <View
-                      key={t.id}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: ui.borderSoft,
-                        borderRadius: 10,
-                        padding: 10,
-                        gap: 2,
-                      }}
-                    >
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                        <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700", flex: 1 }} numberOfLines={1}>
-                          {t.title}
-                        </Text>
-                        <StatusBadge status={t.status} />
-                      </View>
-                      <Text style={{ color: ui.textMuted, fontSize: 11 }}>{fmtDate(t.createdAt)}</Text>
-                    </View>
-                  ))}
+                  {reported.map((t) => {
+                    const expanded = expandedId === t.id;
+                    return (
+                      <Pressable
+                        key={t.id}
+                        onPress={() => setExpandedId(expanded ? null : t.id)}
+                        style={{
+                          borderWidth: 1,
+                          borderColor: ui.borderSoft,
+                          borderRadius: 10,
+                          padding: 10,
+                          gap: 2,
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                          <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700", flex: 1 }} numberOfLines={1}>
+                            {t.title}
+                          </Text>
+                          <StatusBadge status={t.status} />
+                        </View>
+                        <Text style={{ color: ui.textMuted, fontSize: 11 }}>{fmtDate(t.createdAt)}</Text>
+                        {expanded && (
+                          <View style={{ marginTop: 6, gap: 4 }}>
+                            <Text style={{ color: ui.text, fontSize: 12 }}>
+                              {t.description?.trim() ? t.description : "Sin descripción."}
+                            </Text>
+                            {!!t.dueDate && (
+                              <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                                Fecha límite: {t.dueDate}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
                 </View>
               )}
             </Card>

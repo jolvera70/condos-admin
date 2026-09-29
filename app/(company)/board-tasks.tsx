@@ -1029,10 +1029,7 @@ export default function BoardTasks() {
             </View>
 
             {!!t.description && (
-              <Text
-                style={{ color: ui.textMuted, fontSize: 12 }}
-                numberOfLines={3}
-              >
+              <Text style={{ color: ui.textMuted, fontSize: 12 }}>
                 {t.description}
               </Text>
             )}

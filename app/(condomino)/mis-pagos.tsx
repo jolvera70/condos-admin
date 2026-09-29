@@ -1,14 +1,18 @@
 // app/(condomino)/mis-pagos.tsx
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { apiAuth } from "../../lib/api";
+import { apiAuth, BASE } from "../../lib/api";
 import { useMyUnits } from "../../lib/condomino";
+import { useApp } from "../../lib/store";
 
 const ui = {
   bg: "#FBF1E1",
@@ -66,9 +70,43 @@ function fmtDate(s?: string) {
 }
 
 export default function MisPagos() {
+  const { token } = useApp();
   const { units, loading: unitsLoading, error: unitsError } = useMyUnits();
   const [statements, setStatements] = useState<Record<string, Statement>>({});
   const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState("");
+
+  const downloadStatementCsv = async (unitId: string, orgId: string) => {
+    setDownloadingId(unitId);
+    setDownloadError("");
+    try {
+      const url = `${BASE}/billing/account-statement/export/csv?orgId=${encodeURIComponent(orgId)}&unitId=${encodeURIComponent(unitId)}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`No se pudo descargar el estado de cuenta (${res.status})`);
+      const fileName = `estado-cuenta-${unitId}.csv`;
+      if (Platform.OS === "web") {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+      } else {
+        const text = await res.text();
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        await FileSystem.writeAsStringAsync(fileUri, text, { encoding: FileSystem.EncodingType.UTF8 });
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
+      }
+    } catch (e: any) {
+      setDownloadError(e.message ?? String(e));
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   useEffect(() => {
     if (unitsLoading) return;
@@ -129,6 +167,12 @@ export default function MisPagos() {
           </Card>
         )}
 
+        {!!downloadError && (
+          <Card tone="danger">
+            <Text style={{ color: ui.danger, fontSize: 12 }}>{downloadError}</Text>
+          </Card>
+        )}
+
         {!busy && !unitsError && units.length === 0 && (
           <Card>
             <Text style={{ color: ui.textMuted, fontSize: 13 }}>
@@ -178,6 +222,16 @@ export default function MisPagos() {
                         <SummaryTile label="A favor" value={money(st.creditBalance)} tone="success" />
                       )}
                     </View>
+
+                    <Pressable
+                      onPress={() => downloadStatementCsv(u.id, u.orgId)}
+                      disabled={downloadingId === u.id}
+                      style={{ alignSelf: "flex-start", marginBottom: 12 }}
+                    >
+                      <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                        {downloadingId === u.id ? "Descargando…" : "Descargar estado de cuenta (CSV)"}
+                      </Text>
+                    </Pressable>
 
                     <Text style={{ fontWeight: "700", color: ui.text, fontSize: 13, marginBottom: 6 }}>
                       Cuotas y cargos

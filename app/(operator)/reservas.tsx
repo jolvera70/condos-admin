@@ -59,6 +59,11 @@ export default function ReservasOperador() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const [showCreateAmenity, setShowCreateAmenity] = useState(false);
+  const [newAmenityName, setNewAmenityName] = useState("");
+  const [newAmenityDescription, setNewAmenityDescription] = useState("");
+  const [creatingAmenity, setCreatingAmenity] = useState(false);
+
   useEffect(() => {
     if (!orgId) return;
     (async () => {
@@ -78,28 +83,54 @@ export default function ReservasOperador() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  useEffect(() => {
+  const loadAmenitiesAndUnits = useCallback(async () => {
     if (!boardId) return;
-    (async () => {
-      try {
-        const [amenitiesRaw, unitsRaw] = await Promise.all([
-          apiAuth(`/board/boards/${boardId}/amenities?includeInactive=true`, "GET"),
-          apiAuth(`/board/boards/${boardId}/units?includeInactive=true&size=500`, "GET"),
-        ]);
-        setAmenities(
-          (Array.isArray(amenitiesRaw) ? amenitiesRaw : []).map((a: any) => ({
-            id: String(a.id),
-            name: String(a.name ?? ""),
-          }))
-        );
-        const unitList = Array.isArray(unitsRaw) ? unitsRaw : unitsRaw?.content ?? [];
-        setUnits(unitList.map((u: any) => ({ id: String(u.id), identifier: String(u.identifier) })));
-      } catch {
-        setAmenities([]);
-        setUnits([]);
-      }
-    })();
+    try {
+      const [amenitiesRaw, unitsRaw] = await Promise.all([
+        apiAuth(`/board/boards/${boardId}/amenities?includeInactive=true`, "GET"),
+        apiAuth(`/board/boards/${boardId}/units?includeInactive=true&size=500`, "GET"),
+      ]);
+      setAmenities(
+        (Array.isArray(amenitiesRaw) ? amenitiesRaw : []).map((a: any) => ({
+          id: String(a.id),
+          name: String(a.name ?? ""),
+        }))
+      );
+      const unitList = Array.isArray(unitsRaw) ? unitsRaw : unitsRaw?.content ?? [];
+      setUnits(unitList.map((u: any) => ({ id: String(u.id), identifier: String(u.identifier) })));
+    } catch {
+      setAmenities([]);
+      setUnits([]);
+    }
   }, [boardId]);
+
+  useEffect(() => {
+    loadAmenitiesAndUnits();
+  }, [loadAmenitiesAndUnits]);
+
+  const createAmenity = async () => {
+    if (!boardId || !newAmenityName.trim()) {
+      setMsg("Escribe un nombre para el área (ej. Alberca, Salón de fiestas)");
+      return;
+    }
+    setCreatingAmenity(true);
+    setMsg("");
+    try {
+      await apiAuth(`/board/boards/${boardId}/amenities`, "POST", {
+        name: newAmenityName.trim(),
+        description: newAmenityDescription.trim() || undefined,
+      });
+      setNewAmenityName("");
+      setNewAmenityDescription("");
+      setShowCreateAmenity(false);
+      setMsg("Área creada ✅");
+      await loadAmenitiesAndUnits();
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setCreatingAmenity(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!boardId || !dateFrom || !dateTo) return;
@@ -167,12 +198,62 @@ export default function ReservasOperador() {
         </Card>
 
         {!!msg && (
-          <Card tone={msg.includes("cancel") ? "default" : "danger"}>
-            <Text style={{ color: msg.includes("cancel") ? ui.success : ui.danger, fontSize: 12 }}>{msg}</Text>
+          <Card tone={msg.includes("cancel") || msg.includes("✅") ? "default" : "danger"}>
+            <Text
+              style={{
+                color: msg.includes("cancel") || msg.includes("✅") ? ui.success : ui.danger,
+                fontSize: 12,
+              }}
+            >
+              {msg}
+            </Text>
           </Card>
         )}
 
         <Card>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <Text style={{ fontWeight: "800", color: ui.text, fontSize: 14 }}>Áreas comunes</Text>
+            <Pressable onPress={() => setShowCreateAmenity((v) => !v)}>
+              <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                {showCreateAmenity ? "Cancelar" : "+ Nueva área"}
+              </Text>
+            </Pressable>
+          </View>
+
+          {showCreateAmenity && (
+            <View style={{ gap: 8, marginBottom: 4 }}>
+              <TextInput
+                value={newAmenityName}
+                onChangeText={setNewAmenityName}
+                placeholder="Nombre del área (ej. Alberca, Salón de fiestas)"
+                placeholderTextColor={ui.textMuted}
+                style={inputStyle}
+              />
+              <TextInput
+                value={newAmenityDescription}
+                onChangeText={setNewAmenityDescription}
+                placeholder="Descripción (opcional)"
+                placeholderTextColor={ui.textMuted}
+                style={inputStyle}
+              />
+              <Pressable
+                onPress={createAmenity}
+                disabled={creatingAmenity}
+                style={{
+                  alignSelf: "flex-start",
+                  backgroundColor: creatingAmenity ? ui.borderSoft : ui.primary,
+                  paddingVertical: 9,
+                  paddingHorizontal: 14,
+                  borderRadius: 999,
+                }}
+              >
+                <Text style={{ color: creatingAmenity ? ui.text : "#FFFFFF", fontSize: 13, fontWeight: "700" }}>
+                  {creatingAmenity ? "Creando…" : "Crear área"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
           <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
             <Field label="Colonia">
               {loadingBoards ? (

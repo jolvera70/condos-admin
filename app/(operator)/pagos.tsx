@@ -1,4 +1,6 @@
 // app/(operator)/pagos.tsx
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -9,7 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { apiAuth } from "../../lib/api";
+import { apiAuth, BASE } from "../../lib/api";
 import { pickAndUploadFile } from "../../lib/attachments";
 import { useApp } from "../../lib/store";
 
@@ -169,6 +171,59 @@ export default function PagosOperador() {
     loadCharges();
   }, [loadCharges]);
 
+  const [downloadingStatement, setDownloadingStatement] = useState(false);
+
+  const downloadStatementCsv = async () => {
+    if (!unitId) return;
+    setDownloadingStatement(true);
+    setMsg("");
+    try {
+      const url = `${BASE}/billing/account-statement/export/csv?orgId=${encodeURIComponent(orgId)}&unitId=${encodeURIComponent(unitId)}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`No se pudo descargar el estado de cuenta (${res.status})`);
+      const fileName = `estado-cuenta-${unitId}.csv`;
+      if (Platform.OS === "web") {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+      } else {
+        const text = await res.text();
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        await FileSystem.writeAsStringAsync(fileUri, text, { encoding: FileSystem.EncodingType.UTF8 });
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
+      }
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setDownloadingStatement(false);
+    }
+  };
+
+  const [sendingReminder, setSendingReminder] = useState(false);
+
+  const sendPaymentReminder = async () => {
+    if (!unitId) return;
+    setSendingReminder(true);
+    setMsg("");
+    try {
+      await apiAuth(
+        `/billing/units/${unitId}/payment-reminder?orgId=${encodeURIComponent(orgId)}`,
+        "POST"
+      );
+      setMsg("Recordatorio enviado ✅");
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setSendingReminder(false);
+    }
+  };
+
   const toggleCharge = (id: string, chargeAmount: number) => {
     setSelected((prev) => {
       const isSelected = prev.includes(id);
@@ -284,9 +339,34 @@ export default function PagosOperador() {
 
           {!!unitId && (
             <View style={{ marginTop: 6 }}>
-              <Text style={{ color: ui.text, fontWeight: "700", fontSize: 13, marginBottom: 6 }}>
-                Cargos pendientes
-              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 6,
+                }}
+              >
+                <Text style={{ color: ui.text, fontWeight: "700", fontSize: 13 }}>
+                  Cargos pendientes
+                </Text>
+                <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap" }}>
+                  {charges.length > 0 && (
+                    <Pressable onPress={sendPaymentReminder} disabled={sendingReminder}>
+                      <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                        {sendingReminder ? "Enviando…" : "Enviar recordatorio por correo"}
+                      </Text>
+                    </Pressable>
+                  )}
+                  <Pressable onPress={downloadStatementCsv} disabled={downloadingStatement}>
+                    <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                      {downloadingStatement ? "Descargando…" : "Descargar estado de cuenta (CSV)"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
               {loadingCharges ? (
                 <ActivityIndicator color={ui.primary} />
               ) : charges.length === 0 ? (

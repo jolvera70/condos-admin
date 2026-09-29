@@ -53,10 +53,6 @@ function money(n?: number) {
   return v.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 }
 
-function currentPeriod() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function monthLabel(d: Date) {
   return d.toLocaleDateString("es-MX", { month: "long" });
@@ -70,7 +66,6 @@ export default function CondominoDashboard() {
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   const [statement, setStatement] = useState<Statement | null>(null);
-  const [collectionPct, setCollectionPct] = useState<number | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
@@ -84,21 +79,11 @@ export default function CondominoDashboard() {
     (async () => {
       setLoadingDetail(true);
       try {
-        const [st, coll] = await Promise.all([
-          apiAuth(
-            `/billing/account-statement?orgId=${encodeURIComponent(selectedUnit.orgId)}&unitId=${encodeURIComponent(selectedUnit.id)}`,
-            "GET"
-          ).catch(() => null),
-          apiAuth(
-            `/billing/stats/collection-by-board?orgId=${encodeURIComponent(selectedUnit.orgId)}&period=${currentPeriod()}`,
-            "GET"
-          ).catch(() => []),
-        ]);
+        const st = await apiAuth(
+          `/billing/account-statement?orgId=${encodeURIComponent(selectedUnit.orgId)}&unitId=${encodeURIComponent(selectedUnit.id)}`,
+          "GET"
+        ).catch(() => null);
         setStatement(st);
-        const row = (Array.isArray(coll) ? coll : []).find(
-          (r: any) => String(r.boardId) === selectedUnit.boardId
-        );
-        setCollectionPct(row ? Number(row.percentage) : null);
       } finally {
         setLoadingDetail(false);
       }
@@ -265,22 +250,18 @@ export default function CondominoDashboard() {
               />
             )}
 
-            {/* Teaser de aprobaciones/actas: igual para todos, el acceso completo solo lo da el menú del comité */}
-            <Banner
-              bg={ui.primarySoft}
-              textColor={ui.primary}
-              icon="📋"
-              text="Aprobaciones y actas de tu colonia: próximamente."
-            />
+            {/* Aprobaciones y actas: solo comité de vigilancia */}
+            {isCommitteeMember && (
+              <Banner
+                bg={ui.primarySoft}
+                textColor={ui.primary}
+                icon="📋"
+                text="Aprobaciones y actas de tu colonia: próximamente."
+              />
+            )}
 
             {/* KPIs */}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-              <Kpi title="Fondo de reserva" value="—" hint="Próximamente" />
-              <Kpi
-                title="Cobranza del mes"
-                value={collectionPct !== null ? `${collectionPct}%` : "—"}
-                hint={collectionPct === null ? "Sin datos del mes" : "de tu colonia"}
-              />
               <Kpi title="Gasto del mes" value="—" hint="Próximamente" />
             </View>
 
@@ -290,29 +271,31 @@ export default function CondominoDashboard() {
                 gap: 12,
               }}
             >
-              {/* Pendientes de aprobar (placeholder) */}
-              <View style={{ flex: 2 }}>
-                <Card>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 10,
-                    }}
-                  >
-                    <Text style={{ fontWeight: "800", color: ui.text, fontSize: 14 }}>
-                      Pendientes de aprobar
+              {/* Pendientes de aprobar (placeholder): solo comité de vigilancia */}
+              {isCommitteeMember && (
+                <View style={{ flex: 2 }}>
+                  <Card>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Text style={{ fontWeight: "800", color: ui.text, fontSize: 14 }}>
+                        Pendientes de aprobar
+                      </Text>
+                      <Pressable onPress={() => router.push("/(condomino)/aprobaciones" as any)}>
+                        <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>Ver todo</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={{ color: ui.textMuted, fontSize: 12 }}>
+                      Próximamente: cotizaciones y presupuestos de la colonia.
                     </Text>
-                    <Pressable onPress={() => router.push("/(condomino)/aprobaciones" as any)}>
-                      <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>Ver todo</Text>
-                    </Pressable>
-                  </View>
-                  <Text style={{ color: ui.textMuted, fontSize: 12 }}>
-                    Próximamente: cotizaciones y presupuestos de la colonia.
-                  </Text>
-                </Card>
-              </View>
+                  </Card>
+                </View>
+              )}
 
               <View style={{ flex: 1, gap: 12 }}>
                 {/* Mi cuenta */}

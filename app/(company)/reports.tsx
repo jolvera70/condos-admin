@@ -862,10 +862,13 @@ export default function ReportsCompany() {
 
   /* ====================== RENDER ====================== */
   if (isWeb) {
-    // 🔹 Web: el ScrollView es root con altura de viewport
+    // 🔹 Web: el ScrollView llena el alto disponible dentro del layout
+    // (no 100vh: esta pantalla vive anidada en SidebarShell, que ya reserva
+    // padding alrededor del contenido; 100vh se pasaba de ese espacio y
+    // recortaba el final de la pantalla por el overflow:hidden del shell).
     return (
       <ScrollView
-        style={{ height: "100vh", backgroundColor: C.bg } as any}
+        style={{ height: "100%", backgroundColor: C.bg } as any}
         contentContainerStyle={{
           padding: 12,
           gap: 12,

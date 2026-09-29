@@ -568,7 +568,6 @@ export default function BoardBillingAdminScreen() {
         flex: 1,
         minHeight: 0,
         backgroundColor: ui.bg,
-        ...(Platform.OS === "web" ? ({ height: "100vh" } as any) : {}),
       }}>
       <View
         style={{

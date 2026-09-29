@@ -6,6 +6,7 @@ import { useApp } from "../../lib/store";
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Inicio", route: "/(operator)", icon: "home" },
+  { label: "Domicilios", route: "/(operator)/unidades", icon: "home-outline" },
   { label: "Incidencias", route: "/(operator)/incidencias", icon: "alert-circle-outline" },
   { label: "Pagos", route: "/(operator)/pagos", icon: "card-outline" },
   { label: "Egresos", route: "/(operator)/egresos", icon: "wallet-outline" },
