@@ -1626,6 +1626,7 @@ function Kanban({
   updateStatus,
 }: any) {
   const { width: vw } = useWindowDimensions();
+  const [expandedDescId, setExpandedDescId] = useState<Record<string, boolean>>({});
   const COLS = Object.keys(byStatus).length;
   const GAP = 18;
   const OUTER = vw < 768 ? 14 : 22;
@@ -1783,16 +1784,36 @@ if (Platform.OS === "web") {
                               {t.title}
                             </Text>
                             {!!t.description && (
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  color: lokalyTheme.boardTextMuted,
-                                  marginTop: 2,
-                                }}
-                                numberOfLines={2}
-                              >
-                                {t.description}
-                              </Text>
+                              <>
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    color: lokalyTheme.boardTextMuted,
+                                    marginTop: 2,
+                                  }}
+                                  numberOfLines={expandedDescId[t.id] ? undefined : 2}
+                                >
+                                  {t.description}
+                                </Text>
+                                {t.description.length > 80 && (
+                                  <Pressable
+                                    onPress={() =>
+                                      setExpandedDescId((prev) => ({ ...prev, [t.id]: !prev[t.id] }))
+                                    }
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: "700",
+                                        color: lokalyTheme.primary,
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      {expandedDescId[t.id] ? "Ver menos" : "Ver más"}
+                                    </Text>
+                                  </Pressable>
+                                )}
+                              </>
                             )}
                           </View>
 
@@ -2144,16 +2165,36 @@ if (Platform.OS === "web") {
                               {t.title}
                             </Text>
                             {!!t.description && (
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  color: lokalyTheme.boardTextMuted,
-                                  marginTop: 2,
-                                }}
-                                numberOfLines={2}
-                              >
-                                {t.description}
-                              </Text>
+                              <>
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    color: lokalyTheme.boardTextMuted,
+                                    marginTop: 2,
+                                  }}
+                                  numberOfLines={expandedDescId[t.id] ? undefined : 2}
+                                >
+                                  {t.description}
+                                </Text>
+                                {t.description.length > 80 && (
+                                  <Pressable
+                                    onPress={() =>
+                                      setExpandedDescId((prev) => ({ ...prev, [t.id]: !prev[t.id] }))
+                                    }
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: "700",
+                                        color: lokalyTheme.primary,
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      {expandedDescId[t.id] ? "Ver menos" : "Ver más"}
+                                    </Text>
+                                  </Pressable>
+                                )}
+                              </>
                             )}
                           </View>
 

@@ -79,6 +79,11 @@ export default function IncidenciasCondomino() {
   const [loadingReported, setLoadingReported] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   useEffect(() => {
     if (!unitId && units.length > 0) setUnitId(units[0].id);
   }, [units, unitId]);
@@ -112,6 +117,37 @@ export default function IncidenciasCondomino() {
   useEffect(() => {
     loadReported();
   }, [loadReported]);
+
+  const startEdit = (t: Task) => {
+    setEditingId(t.id);
+    setEditTitle(t.title);
+    setEditDescription(t.description ?? "");
+    setExpandedId(t.id);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async (id: string) => {
+    if (!editTitle.trim()) {
+      setMsg("Escribe un título");
+      return;
+    }
+    setSavingEdit(true);
+    setMsg("");
+    try {
+      await apiAuth(`/board/tasks/${id}`, "PUT", {
+        title: editTitle.trim(),
+        description: editDescription.trim() || undefined,
+      });
+      setMsg("Incidencia actualizada ✅");
+      setEditingId(null);
+      await loadReported();
+    } catch (e: any) {
+      setMsg(e.message ?? String(e));
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const addEvidence = async () => {
     if (evidence.length >= MAX_EVIDENCE) return;
@@ -334,10 +370,11 @@ export default function IncidenciasCondomino() {
                 <View style={{ gap: 6 }}>
                   {reported.map((t) => {
                     const expanded = expandedId === t.id;
+                    const isEditing = editingId === t.id;
+                    const canEdit = t.status === "OPEN" || t.status === "IN_PROGRESS";
                     return (
-                      <Pressable
+                      <View
                         key={t.id}
-                        onPress={() => setExpandedId(expanded ? null : t.id)}
                         style={{
                           borderWidth: 1,
                           borderColor: ui.borderSoft,
@@ -346,14 +383,20 @@ export default function IncidenciasCondomino() {
                           gap: 2,
                         }}
                       >
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                          <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700", flex: 1 }} numberOfLines={1}>
-                            {t.title}
-                          </Text>
-                          <StatusBadge status={t.status} />
-                        </View>
-                        <Text style={{ color: ui.textMuted, fontSize: 11 }}>{fmtDate(t.createdAt)}</Text>
-                        {expanded && (
+                        <Pressable
+                          onPress={() => setExpandedId(expanded ? null : t.id)}
+                          disabled={isEditing}
+                        >
+                          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                            <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700", flex: 1 }} numberOfLines={1}>
+                              {t.title}
+                            </Text>
+                            <StatusBadge status={t.status} />
+                          </View>
+                          <Text style={{ color: ui.textMuted, fontSize: 11 }}>{fmtDate(t.createdAt)}</Text>
+                        </Pressable>
+
+                        {expanded && !isEditing && (
                           <View style={{ marginTop: 6, gap: 4 }}>
                             <Text style={{ color: ui.text, fontSize: 12 }}>
                               {t.description?.trim() ? t.description : "Sin descripción."}
@@ -363,9 +406,66 @@ export default function IncidenciasCondomino() {
                                 Fecha límite: {t.dueDate}
                               </Text>
                             )}
+                            {canEdit && (
+                              <Pressable onPress={() => startEdit(t)} style={{ marginTop: 4 }}>
+                                <Text style={{ color: ui.primary, fontSize: 12, fontWeight: "700" }}>
+                                  Editar
+                                </Text>
+                              </Pressable>
+                            )}
                           </View>
                         )}
-                      </Pressable>
+
+                        {isEditing && (
+                          <View style={{ marginTop: 8, gap: 8 }}>
+                            <TextInput
+                              value={editTitle}
+                              onChangeText={setEditTitle}
+                              placeholder="Título"
+                              placeholderTextColor={ui.textMuted}
+                              style={inputStyle}
+                            />
+                            <TextInput
+                              value={editDescription}
+                              onChangeText={setEditDescription}
+                              placeholder="Descripción"
+                              placeholderTextColor={ui.textMuted}
+                              multiline
+                              style={[inputStyle, { minHeight: 60, textAlignVertical: "top" }]}
+                            />
+                            <View style={{ flexDirection: "row", gap: 8 }}>
+                              <Pressable
+                                onPress={() => saveEdit(t.id)}
+                                disabled={savingEdit}
+                                style={{
+                                  flex: 1,
+                                  backgroundColor: savingEdit ? ui.borderSoft : ui.primary,
+                                  paddingVertical: 10,
+                                  borderRadius: 10,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
+                                  {savingEdit ? "Guardando…" : "Guardar cambios"}
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={cancelEdit}
+                                disabled={savingEdit}
+                                style={{
+                                  paddingHorizontal: 14,
+                                  paddingVertical: 10,
+                                  borderRadius: 10,
+                                  backgroundColor: ui.borderSoft,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text style={{ color: ui.text, fontWeight: "700", fontSize: 13 }}>Cancelar</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        )}
+                      </View>
                     );
                   })}
                 </View>

@@ -50,7 +50,7 @@ type Task = {
 };
 
 type TaskAttachmentDto = { id: string; key: string; contentType: string; size: number; url: string };
-type UserOpt = { id: string; label: string };
+type UserOpt = { id: string; label: string; role?: string };
 type StatusFilter = "ALL" | "OPEN" | "IN_PROGRESS" | "DONE" | "ARCHIVED";
 
 /* =============== Breakpoints =============== */
@@ -398,6 +398,14 @@ export default function BoardTasks() {
     [users]
   );
 
+  // Para "Asignar/Reasignar" solo staff (nunca condóminos), aunque
+  // userNameById necesite a todos para mostrar "Reportada por" cuando
+  // reporta un condómino.
+  const staffUsers = useMemo(
+    () => users.filter((u) => u.role === "ADMINISTRADOR" || u.role === "SUPERVISOR" || u.role === "OPERATIVO"),
+    [users]
+  );
+
   // Evidencia adjunta (fotos que el condómino subió al reportar) — se carga
   // bajo demanda al expandir cada tarjeta, no de golpe para todas las tareas.
   const [attachmentsByTask, setAttachmentsByTask] = useState<
@@ -467,6 +475,9 @@ export default function BoardTasks() {
   const loadUsers = useCallback(async () => {
     if (!orgId) return;
     try {
+      // Sin filtro de rol: se necesitan TODOS los usuarios de la org (incluye
+      // condóminos) para mostrar "Reportada por" con nombre; el picker de
+      // Asignar/Reasignar filtra aparte con staffUsers (solo staff).
       const list = await apiAuth(
         `/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE`,
         "GET",
@@ -477,10 +488,12 @@ export default function BoardTasks() {
         (u: any) => ({
           id: String(u.id),
           label: String(u.fullName?.trim() || u.email),
+          role: u.orgs?.find((o: any) => o.orgId === orgId)?.role,
         })
       );
       setUsers(arr);
-      if (!assigneeId && arr.length) setAssigneeId(arr[0].id);
+      const staff = arr.filter((u) => u.role === "ADMINISTRADOR" || u.role === "SUPERVISOR" || u.role === "OPERATIVO");
+      if (!assigneeId && staff.length) setAssigneeId(staff[0].id);
     } catch (e: any) {
       setMsg(e.message ?? String(e));
     }
@@ -897,7 +910,7 @@ export default function BoardTasks() {
                 <AssigneeSelector
                   assigneeId={assigneeId}
                   setAssigneeId={setAssigneeId}
-                  users={users}
+                  users={staffUsers}
                 />
                 {Platform.OS === "web" ? (
                   <input
@@ -1091,7 +1104,7 @@ export default function BoardTasks() {
                 <AssigneeSelector
                   assigneeId={t.assigneeId ?? ""}
                   setAssigneeId={(v) => reassign(t, v)}
-                  users={users}
+                  users={staffUsers}
                 />
                 {savingAssignee && <ActivityIndicator size="small" color={ui.primary} />}
               </View>

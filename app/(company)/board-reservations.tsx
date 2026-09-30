@@ -30,6 +30,7 @@ type Reservation = {
   id: string;
   unitId: string;
   date: string;
+  startTime?: string;
   peopleCount?: number;
   note?: string;
   status: string;
@@ -84,11 +85,12 @@ export default function BoardReservationsScreen() {
           id: String(r.id),
           unitId: String(r.unitId),
           date: String(r.date),
+          startTime: r.startTime,
           peopleCount: r.peopleCount,
           note: r.note,
           status: r.status,
         }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? "").localeCompare(b.startTime ?? ""));
       setReservations(list);
     } catch (e: any) {
       setMsg(e.message ?? String(e));
@@ -222,7 +224,8 @@ export default function BoardReservationsScreen() {
           >
             <View style={{ flex: 1 }}>
               <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700" }}>
-                {r.date} · {unitLabelById[r.unitId] ?? r.unitId}
+                {r.date}
+                {r.startTime ? ` ${r.startTime}` : ""} · {unitLabelById[r.unitId] ?? r.unitId}
               </Text>
               <Text style={{ color: ui.textMuted, fontSize: 11 }}>
                 {r.peopleCount ? `${r.peopleCount} persona(s)` : ""}

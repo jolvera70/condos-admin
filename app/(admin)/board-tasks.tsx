@@ -86,7 +86,7 @@ export default function BoardTasks() {
     if (!orgId) return;
     try {
       const list = await apiAuth(
-        `/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE`,
+        `/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE&role=ADMINISTRADOR,SUPERVISOR,OPERATIVO`,
         "GET",
         undefined,
         token ?? undefined

@@ -35,6 +35,10 @@ type Amenity = {
   maxReservationsPerUnitPerDay?: number;
   maxReservationsPerDay?: number;
   advanceBookingDays?: number;
+  openTime?: string;
+  closeTime?: string;
+  slotDurationMinutes?: number;
+  timeSlots?: string[];
   notes?: string;
   status: string;
 };
@@ -44,6 +48,8 @@ type Reservation = {
   amenityId: string;
   unitId: string;
   date: string;
+  startTime?: string;
+  endTime?: string;
   peopleCount?: number;
   note?: string;
   status: string;
@@ -51,6 +57,14 @@ type Reservation = {
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Normaliza "YYYY-M-D" -> "YYYY-MM-DD" (el backend exige ISO estricto con ceros). */
+function normalizeDate(s: string): string {
+  const m = s.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return s.trim();
+  const [, y, mo, d] = m;
+  return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
 function fmtDate(s?: string) {
@@ -83,11 +97,16 @@ export default function ReservasCondomino() {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [date, setDate] = useState(todayISO());
+  const [startTime, setStartTime] = useState<string>("");
   const [peopleCount, setPeopleCount] = useState("1");
   const [note, setNote] = useState("");
   const [availability, setAvailability] = useState<{
     remaining: number | null;
     unitAlreadyReservedToday: boolean;
+    allSlots: string[];
+    takenSlots: string[];
+    blocked: boolean;
+    blockReason: string | null;
   } | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -98,9 +117,12 @@ export default function ReservasCondomino() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
   const [editPeopleCount, setEditPeopleCount] = useState("");
   const [editNote, setEditNote] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editAvailability, setEditAvailability] = useState<{ allSlots: string[]; takenSlots: string[] } | null>(null);
+  const [checkingEditAvailability, setCheckingEditAvailability] = useState(false);
 
   useEffect(() => {
     if (!unitId && units.length > 0) setUnitId(units[0].id);
@@ -123,6 +145,10 @@ export default function ReservasCondomino() {
           maxReservationsPerUnitPerDay: a.maxReservationsPerUnitPerDay,
           maxReservationsPerDay: a.maxReservationsPerDay,
           advanceBookingDays: a.advanceBookingDays,
+          openTime: a.openTime,
+          closeTime: a.closeTime,
+          slotDurationMinutes: a.slotDurationMinutes,
+          timeSlots: Array.isArray(a.timeSlots) ? a.timeSlots : [],
           notes: a.notes,
           status: a.status,
         }));
@@ -149,6 +175,8 @@ export default function ReservasCondomino() {
         amenityId: String(r.amenityId),
         unitId: String(r.unitId),
         date: String(r.date),
+        startTime: r.startTime,
+        endTime: r.endTime,
         peopleCount: r.peopleCount,
         note: r.note,
         status: r.status,
@@ -168,6 +196,7 @@ export default function ReservasCondomino() {
   const openBooking = (a: Amenity) => {
     setExpandedId(a.id);
     setDate(todayISO());
+    setStartTime("");
     setPeopleCount("1");
     setNote("");
     setAvailability(null);
@@ -179,13 +208,18 @@ export default function ReservasCondomino() {
     setCheckingAvailability(true);
     try {
       const raw = await apiAuth(
-        `/board/amenities/${expandedId}/availability?date=${date}&unitId=${encodeURIComponent(unitId)}`,
+        `/board/amenities/${expandedId}/availability?date=${normalizeDate(date)}&unitId=${encodeURIComponent(unitId)}`,
         "GET"
       );
       setAvailability({
         remaining: raw?.remaining ?? null,
         unitAlreadyReservedToday: !!raw?.unitAlreadyReservedToday,
+        allSlots: Array.isArray(raw?.allSlots) ? raw.allSlots : [],
+        takenSlots: Array.isArray(raw?.takenSlots) ? raw.takenSlots : [],
+        blocked: !!raw?.blocked,
+        blockReason: raw?.blockReason ?? null,
       });
+      setStartTime((prev) => (raw?.allSlots?.includes(prev) ? prev : ""));
     } catch {
       setAvailability(null);
     } finally {
@@ -200,12 +234,17 @@ export default function ReservasCondomino() {
   const reservar = async (a: Amenity) => {
     setMsg("");
     if (!unitId) return;
+    if ((a.timeSlots?.length ?? 0) > 0 && !startTime) {
+      setMsg("Elige un horario disponible.");
+      return;
+    }
     const people = peopleCount ? Number(peopleCount) : undefined;
     setSubmitting(true);
     try {
       await apiAuth(`/board/amenities/${a.id}/reservations`, "POST", {
         unitId,
-        date,
+        date: normalizeDate(date),
+        startTime: startTime || undefined,
         peopleCount: people,
         note: note.trim() || undefined,
       });
@@ -223,11 +262,38 @@ export default function ReservasCondomino() {
     setMsg("");
     setEditingId(r.id);
     setEditDate(r.date);
+    setEditStartTime(r.startTime ?? "");
     setEditPeopleCount(r.peopleCount ? String(r.peopleCount) : "");
     setEditNote(r.note ?? "");
+    setEditAvailability(null);
   };
 
   const cancelEdit = () => setEditingId(null);
+
+  const checkEditAvailability = useCallback(async () => {
+    if (!editingId || !editDate) return;
+    const r = myReservations.find((x) => x.id === editingId);
+    if (!r) return;
+    setCheckingEditAvailability(true);
+    try {
+      const raw = await apiAuth(
+        `/board/amenities/${r.amenityId}/availability?date=${normalizeDate(editDate)}&unitId=${encodeURIComponent(r.unitId)}`,
+        "GET"
+      );
+      const allSlots: string[] = Array.isArray(raw?.allSlots) ? raw.allSlots : [];
+      const takenSlots: string[] = Array.isArray(raw?.takenSlots) ? raw.takenSlots : [];
+      setEditAvailability({ allSlots, takenSlots: takenSlots.filter((s) => s !== r.startTime) });
+      setEditStartTime((prev) => (allSlots.includes(prev) ? prev : ""));
+    } catch {
+      setEditAvailability(null);
+    } finally {
+      setCheckingEditAvailability(false);
+    }
+  }, [editingId, editDate, myReservations]);
+
+  useEffect(() => {
+    checkEditAvailability();
+  }, [checkEditAvailability]);
 
   const saveEdit = async (id: string) => {
     setMsg("");
@@ -235,10 +301,15 @@ export default function ReservasCondomino() {
       setMsg("Indica una fecha");
       return;
     }
+    if ((editAvailability?.allSlots.length ?? 0) > 0 && !editStartTime) {
+      setMsg("Elige un horario disponible.");
+      return;
+    }
     setSavingEdit(true);
     try {
       await apiAuth(`/board/reservations/${id}`, "PATCH", {
-        date: editDate,
+        date: normalizeDate(editDate),
+        startTime: editStartTime || undefined,
         peopleCount: editPeopleCount ? Number(editPeopleCount) : undefined,
         note: editNote.trim() || undefined,
       });
@@ -352,6 +423,9 @@ export default function ReservasCondomino() {
                     {a.advanceBookingDays != null && (
                       <RuleChip text={`Hasta ${a.advanceBookingDays} día(s) de anticipación`} />
                     )}
+                    {a.openTime && a.closeTime && (
+                      <RuleChip text={`${a.openTime}–${a.closeTime}, bloques de ${a.slotDurationMinutes} min`} />
+                    )}
                   </View>
 
                   {!!a.notes && (
@@ -378,6 +452,51 @@ export default function ReservasCondomino() {
                           style={inputStyle}
                         />
                       </Field>
+                      {(a.timeSlots?.length ?? 0) > 0 && (
+                        <Field label="Horario">
+                          {checkingAvailability ? (
+                            <ActivityIndicator color={ui.primary} size="small" />
+                          ) : (
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                              {(a.timeSlots ?? []).map((slot) => {
+                                const taken = !!availability?.takenSlots?.includes(slot);
+                                const selected = startTime === slot;
+                                return (
+                                  <Pressable
+                                    key={slot}
+                                    disabled={taken}
+                                    onPress={() => setStartTime(slot)}
+                                    style={{
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 8,
+                                      borderRadius: 999,
+                                      borderWidth: 1,
+                                      borderColor: selected ? ui.primary : ui.border,
+                                      backgroundColor: taken
+                                        ? ui.borderSoft
+                                        : selected
+                                        ? ui.primarySoft
+                                        : "transparent",
+                                      opacity: taken ? 0.5 : 1,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color: selected ? ui.primary : ui.text,
+                                        fontSize: 12,
+                                        fontWeight: "600",
+                                        textDecorationLine: taken ? "line-through" : "none",
+                                      }}
+                                    >
+                                      {slot}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                          )}
+                        </Field>
+                      )}
                       <Field label="Número de personas">
                         <TextInput
                           keyboardType="number-pad"
@@ -398,6 +517,11 @@ export default function ReservasCondomino() {
 
                       {checkingAvailability ? (
                         <ActivityIndicator color={ui.primary} size="small" />
+                      ) : availability?.blocked ? (
+                        <Text style={{ color: ui.danger, fontSize: 12, fontWeight: "700" }}>
+                          Esta amenidad no está disponible ese día
+                          {availability.blockReason ? ` (${availability.blockReason})` : ""}.
+                        </Text>
                       ) : availability ? (
                         <View style={{ gap: 2 }}>
                           {availability.remaining !== null && (
@@ -417,9 +541,9 @@ export default function ReservasCondomino() {
 
                       <Pressable
                         onPress={() => reservar(a)}
-                        disabled={submitting}
+                        disabled={submitting || !!availability?.blocked}
                         style={{
-                          backgroundColor: submitting ? ui.borderSoft : ui.primary,
+                          backgroundColor: submitting || availability?.blocked ? ui.borderSoft : ui.primary,
                           paddingVertical: 12,
                           borderRadius: 10,
                           alignItems: "center",
@@ -473,6 +597,7 @@ export default function ReservasCondomino() {
                       <View>
                         <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700" }}>
                           {amenityNameById[r.amenityId] ?? "Amenidad"} · {fmtDate(r.date)}
+                          {r.startTime ? ` · ${r.startTime}` : ""}
                         </Text>
                         <Text style={{ color: ui.textMuted, fontSize: 11 }}>
                           {r.peopleCount ? `${r.peopleCount} persona(s) · ` : ""}
@@ -518,6 +643,51 @@ export default function ReservasCondomino() {
                             style={inputStyle}
                           />
                         </Field>
+                        {(editAvailability?.allSlots.length ?? 0) > 0 && (
+                          <Field label="Horario">
+                            {checkingEditAvailability ? (
+                              <ActivityIndicator color={ui.primary} size="small" />
+                            ) : (
+                              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                                {(editAvailability?.allSlots ?? []).map((slot) => {
+                                  const taken = !!editAvailability?.takenSlots?.includes(slot);
+                                  const selected = editStartTime === slot;
+                                  return (
+                                    <Pressable
+                                      key={slot}
+                                      disabled={taken}
+                                      onPress={() => setEditStartTime(slot)}
+                                      style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 8,
+                                        borderRadius: 999,
+                                        borderWidth: 1,
+                                        borderColor: selected ? ui.primary : ui.border,
+                                        backgroundColor: taken
+                                          ? ui.borderSoft
+                                          : selected
+                                          ? ui.primarySoft
+                                          : "transparent",
+                                        opacity: taken ? 0.5 : 1,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          color: selected ? ui.primary : ui.text,
+                                          fontSize: 12,
+                                          fontWeight: "600",
+                                          textDecorationLine: taken ? "line-through" : "none",
+                                        }}
+                                      >
+                                        {slot}
+                                      </Text>
+                                    </Pressable>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </Field>
+                        )}
                         <Field label="Número de personas">
                           <TextInput
                             keyboardType="number-pad"

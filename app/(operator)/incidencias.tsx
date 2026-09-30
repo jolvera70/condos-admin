@@ -96,7 +96,7 @@ export default function IncidenciasOperador() {
       }
 
       try {
-        const rawUsers = await apiAuth(`/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE`, "GET");
+        const rawUsers = await apiAuth(`/user/users?orgId=${encodeURIComponent(orgId)}&status=ACTIVE&role=ADMINISTRADOR,SUPERVISOR,OPERATIVO`, "GET");
         const userList: UserOpt[] = (Array.isArray(rawUsers) ? rawUsers : []).map((u: any) => ({
           id: String(u.id),
           label: String(u.fullName?.trim() || u.email),

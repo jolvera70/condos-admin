@@ -33,6 +33,7 @@ type Reservation = {
   amenityId: string;
   unitId: string;
   date: string;
+  startTime?: string;
   peopleCount?: number;
   note?: string;
   status: string;
@@ -62,6 +63,19 @@ export default function ReservasOperador() {
   const [showCreateAmenity, setShowCreateAmenity] = useState(false);
   const [newAmenityName, setNewAmenityName] = useState("");
   const [newAmenityDescription, setNewAmenityDescription] = useState("");
+  const [newAmenityOpenTime, setNewAmenityOpenTime] = useState("");
+  const [newAmenityCloseTime, setNewAmenityCloseTime] = useState("");
+  const [newAmenitySlotMinutes, setNewAmenitySlotMinutes] = useState("");
+  const [newAmenityBlockedDates, setNewAmenityBlockedDates] = useState<{ date: string; reason: string }[]>([]);
+  const [newBlockDate, setNewBlockDate] = useState("");
+  const [newBlockReason, setNewBlockReason] = useState("");
+  const [newAmenityRecurringBlocks, setNewAmenityRecurringBlocks] = useState<
+    { anchorDate: string; intervalWeeks: number; until?: string; reason: string }[]
+  >([]);
+  const [newRecurAnchor, setNewRecurAnchor] = useState("");
+  const [newRecurInterval, setNewRecurInterval] = useState("1");
+  const [newRecurUntil, setNewRecurUntil] = useState("");
+  const [newRecurReason, setNewRecurReason] = useState("");
   const [creatingAmenity, setCreatingAmenity] = useState(false);
 
   useEffect(() => {
@@ -119,9 +133,28 @@ export default function ReservasOperador() {
       await apiAuth(`/board/boards/${boardId}/amenities`, "POST", {
         name: newAmenityName.trim(),
         description: newAmenityDescription.trim() || undefined,
+        openTime: newAmenityOpenTime.trim() || undefined,
+        closeTime: newAmenityCloseTime.trim() || undefined,
+        slotDurationMinutes: newAmenitySlotMinutes.trim() ? Number(newAmenitySlotMinutes.trim()) : undefined,
+        blockedDates: newAmenityBlockedDates.length
+          ? newAmenityBlockedDates.map((b) => ({ date: b.date, reason: b.reason || undefined }))
+          : undefined,
+        recurringBlocks: newAmenityRecurringBlocks.length
+          ? newAmenityRecurringBlocks.map((r) => ({
+              anchorDate: r.anchorDate,
+              intervalWeeks: r.intervalWeeks,
+              until: r.until || undefined,
+              reason: r.reason || undefined,
+            }))
+          : undefined,
       });
       setNewAmenityName("");
       setNewAmenityDescription("");
+      setNewAmenityOpenTime("");
+      setNewAmenityCloseTime("");
+      setNewAmenitySlotMinutes("");
+      setNewAmenityRecurringBlocks([]);
+      setNewAmenityBlockedDates([]);
       setShowCreateAmenity(false);
       setMsg("Área creada ✅");
       await loadAmenitiesAndUnits();
@@ -147,11 +180,12 @@ export default function ReservasOperador() {
           amenityId: String(r.amenityId),
           unitId: String(r.unitId),
           date: String(r.date),
+          startTime: r.startTime,
           peopleCount: r.peopleCount,
           note: r.note,
           status: r.status,
         }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? "").localeCompare(b.startTime ?? ""));
       setReservations(list);
     } catch (e: any) {
       setMsg(e.message ?? String(e));
@@ -236,6 +270,195 @@ export default function ReservasOperador() {
                 placeholderTextColor={ui.textMuted}
                 style={inputStyle}
               />
+              <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                Horario por bloques (opcional): si lo llenas, se reserva por hora en vez de por día
+                completo (ej. abre 08:00, cierra 20:00, bloques de 60 min = solo 1 hora por reserva).
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TextInput
+                  value={newAmenityOpenTime}
+                  onChangeText={setNewAmenityOpenTime}
+                  placeholder="Abre (08:00)"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1 }]}
+                />
+                <TextInput
+                  value={newAmenityCloseTime}
+                  onChangeText={setNewAmenityCloseTime}
+                  placeholder="Cierra (20:00)"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1 }]}
+                />
+                <TextInput
+                  value={newAmenitySlotMinutes}
+                  onChangeText={setNewAmenitySlotMinutes}
+                  placeholder="Bloque (min)"
+                  placeholderTextColor={ui.textMuted}
+                  keyboardType="number-pad"
+                  style={[inputStyle, { flex: 1 }]}
+                />
+              </View>
+              <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                Días sin disponibilidad (opcional, ej. mantenimiento):
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TextInput
+                  value={newBlockDate}
+                  onChangeText={setNewBlockDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1 }]}
+                />
+                <TextInput
+                  value={newBlockReason}
+                  onChangeText={setNewBlockReason}
+                  placeholder="Motivo (opcional)"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1 }]}
+                />
+                <Pressable
+                  onPress={() => {
+                    if (!newBlockDate.trim()) return;
+                    setNewAmenityBlockedDates((prev) => [
+                      ...prev,
+                      { date: newBlockDate.trim(), reason: newBlockReason.trim() },
+                    ]);
+                    setNewBlockDate("");
+                    setNewBlockReason("");
+                  }}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 9,
+                    borderRadius: 999,
+                    backgroundColor: ui.borderSoft,
+                  }}
+                >
+                  <Text style={{ color: ui.text, fontSize: 12, fontWeight: "700" }}>Agregar</Text>
+                </Pressable>
+              </View>
+              {newAmenityBlockedDates.length > 0 && (
+                <View style={{ gap: 4 }}>
+                  {newAmenityBlockedDates.map((b) => (
+                    <View
+                      key={b.date}
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        paddingVertical: 4,
+                        paddingHorizontal: 8,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(220,38,38,0.06)",
+                      }}
+                    >
+                      <Text style={{ color: ui.text, fontSize: 12 }}>
+                        {b.date}
+                        {b.reason ? ` · ${b.reason}` : ""}
+                      </Text>
+                      <Pressable
+                        onPress={() =>
+                          setNewAmenityBlockedDates((prev) => prev.filter((x) => x.date !== b.date))
+                        }
+                      >
+                        <Text style={{ color: ui.danger, fontSize: 12, fontWeight: "700" }}>Quitar</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Text style={{ color: ui.textMuted, fontSize: 11 }}>
+                Bloqueos recurrentes (opcional, ej. "todos los martes" o "cada 2 semanas los martes"):
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                <TextInput
+                  value={newRecurAnchor}
+                  onChangeText={setNewRecurAnchor}
+                  placeholder="A partir de (YYYY-MM-DD)"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1, minWidth: 140 }]}
+                />
+                <TextInput
+                  value={newRecurInterval}
+                  onChangeText={setNewRecurInterval}
+                  placeholder="Cada (semanas)"
+                  placeholderTextColor={ui.textMuted}
+                  keyboardType="number-pad"
+                  style={[inputStyle, { width: 120 }]}
+                />
+                <TextInput
+                  value={newRecurUntil}
+                  onChangeText={setNewRecurUntil}
+                  placeholder="Hasta (opcional)"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1, minWidth: 140 }]}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TextInput
+                  value={newRecurReason}
+                  onChangeText={setNewRecurReason}
+                  placeholder="Motivo (opcional)"
+                  placeholderTextColor={ui.textMuted}
+                  style={[inputStyle, { flex: 1 }]}
+                />
+                <Pressable
+                  onPress={() => {
+                    if (!newRecurAnchor.trim()) return;
+                    setNewAmenityRecurringBlocks((prev) => [
+                      ...prev,
+                      {
+                        anchorDate: newRecurAnchor.trim(),
+                        intervalWeeks: Number(newRecurInterval.trim()) || 1,
+                        until: newRecurUntil.trim() || undefined,
+                        reason: newRecurReason.trim(),
+                      },
+                    ]);
+                    setNewRecurAnchor("");
+                    setNewRecurInterval("1");
+                    setNewRecurUntil("");
+                    setNewRecurReason("");
+                  }}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 9,
+                    borderRadius: 999,
+                    backgroundColor: ui.borderSoft,
+                  }}
+                >
+                  <Text style={{ color: ui.text, fontSize: 12, fontWeight: "700" }}>Agregar</Text>
+                </Pressable>
+              </View>
+              {newAmenityRecurringBlocks.length > 0 && (
+                <View style={{ gap: 4 }}>
+                  {newAmenityRecurringBlocks.map((r, idx) => (
+                    <View
+                      key={`${r.anchorDate}-${idx}`}
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        paddingVertical: 4,
+                        paddingHorizontal: 8,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(220,38,38,0.06)",
+                      }}
+                    >
+                      <Text style={{ color: ui.text, fontSize: 12, flex: 1 }}>
+                        {r.intervalWeeks === 1 ? "Cada semana" : `Cada ${r.intervalWeeks} semanas`}
+                        {` (desde ${r.anchorDate}${r.until ? ` hasta ${r.until}` : ""})`}
+                        {r.reason ? ` · ${r.reason}` : ""}
+                      </Text>
+                      <Pressable
+                        onPress={() =>
+                          setNewAmenityRecurringBlocks((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                      >
+                        <Text style={{ color: ui.danger, fontSize: 12, fontWeight: "700" }}>Quitar</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
               <Pressable
                 onPress={createAmenity}
                 disabled={creatingAmenity}
@@ -326,7 +549,8 @@ export default function ReservasOperador() {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: ui.text, fontSize: 13, fontWeight: "700" }}>
-                      {r.date} · {amenityName(r.amenityId)} · {unitLabel(r.unitId)}
+                      {r.date}
+                      {r.startTime ? ` ${r.startTime}` : ""} · {amenityName(r.amenityId)} · {unitLabel(r.unitId)}
                     </Text>
                     <Text style={{ color: ui.textMuted, fontSize: 11 }}>
                       {r.peopleCount ? `${r.peopleCount} persona(s)` : ""}

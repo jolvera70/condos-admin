@@ -38,9 +38,17 @@ type Amenity = {
   maxReservationsPerUnitPerDay?: number;
   maxReservationsPerDay?: number;
   advanceBookingDays?: number;
+  openTime?: string;
+  closeTime?: string;
+  slotDurationMinutes?: number;
+  blockedDates?: BlockedDate[];
+  recurringBlocks?: RecurringBlock[];
   notes?: string;
   status: AmenityStatus;
 };
+
+type BlockedDate = { date: string; reason: string };
+type RecurringBlock = { anchorDate: string; intervalWeeks: number; until?: string; reason: string };
 
 type FormState = {
   name: string;
@@ -49,6 +57,11 @@ type FormState = {
   maxReservationsPerUnitPerDay: string;
   maxReservationsPerDay: string;
   advanceBookingDays: string;
+  openTime: string;
+  closeTime: string;
+  slotDurationMinutes: string;
+  blockedDates: BlockedDate[];
+  recurringBlocks: RecurringBlock[];
   notes: string;
 };
 
@@ -59,8 +72,20 @@ const EMPTY_FORM: FormState = {
   maxReservationsPerUnitPerDay: "1",
   maxReservationsPerDay: "",
   advanceBookingDays: "",
+  openTime: "",
+  closeTime: "",
+  slotDurationMinutes: "",
+  blockedDates: [],
+  recurringBlocks: [],
   notes: "",
 };
+
+const WEEKDAY_LABEL = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+function weekdayOf(isoDate: string): string {
+  const d = new Date(isoDate + "T00:00:00");
+  return Number.isNaN(d.getTime()) ? "" : WEEKDAY_LABEL[d.getDay()];
+}
 
 function toIntOrUndefined(s: string): number | undefined {
   const t = s.trim();
@@ -152,6 +177,47 @@ function AmenityForm({
   submitLabel: string;
 }) {
   const set = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const [blockDate, setBlockDate] = useState("");
+  const [blockReason, setBlockReason] = useState("");
+
+  const addBlockedDate = () => {
+    const d = blockDate.trim();
+    if (!d) return;
+    setForm((f) => ({ ...f, blockedDates: [...f.blockedDates, { date: d, reason: blockReason.trim() }] }));
+    setBlockDate("");
+    setBlockReason("");
+  };
+
+  const removeBlockedDate = (date: string) => {
+    setForm((f) => ({ ...f, blockedDates: f.blockedDates.filter((b) => b.date !== date) }));
+  };
+
+  const [recurAnchor, setRecurAnchor] = useState("");
+  const [recurInterval, setRecurInterval] = useState("1");
+  const [recurUntil, setRecurUntil] = useState("");
+  const [recurReason, setRecurReason] = useState("");
+
+  const addRecurringBlock = () => {
+    const anchor = recurAnchor.trim();
+    if (!anchor) return;
+    const iv = Number(recurInterval.trim()) || 1;
+    setForm((f) => ({
+      ...f,
+      recurringBlocks: [
+        ...f.recurringBlocks,
+        { anchorDate: anchor, intervalWeeks: iv, until: recurUntil.trim() || undefined, reason: recurReason.trim() },
+      ],
+    }));
+    setRecurAnchor("");
+    setRecurInterval("1");
+    setRecurUntil("");
+    setRecurReason("");
+  };
+
+  const removeRecurringBlock = (idx: number) => {
+    setForm((f) => ({ ...f, recurringBlocks: f.recurringBlocks.filter((_, i) => i !== idx) }));
+  };
+
   return (
     <View style={{ gap: 8 }}>
       <TextInput
@@ -216,6 +282,166 @@ function AmenityForm({
           />
         </View>
       </View>
+      <Text style={{ color: ui.textMuted, fontSize: 11, marginTop: 2 }}>
+        Horario por bloques (opcional): si lo configuras, el condómino elige una hora al reservar en
+        vez de solo el día. Déjalo vacío para reservar por día completo.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ color: ui.textMuted, fontSize: 11 }}>Abre (HH:mm)</Text>
+          <TextInput
+            placeholder="08:00"
+            placeholderTextColor={ui.textMuted}
+            value={form.openTime}
+            onChangeText={set("openTime")}
+            style={inputBox()}
+          />
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ color: ui.textMuted, fontSize: 11 }}>Cierra (HH:mm)</Text>
+          <TextInput
+            placeholder="20:00"
+            placeholderTextColor={ui.textMuted}
+            value={form.closeTime}
+            onChangeText={set("closeTime")}
+            style={inputBox()}
+          />
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ color: ui.textMuted, fontSize: 11 }}>Bloque (min)</Text>
+          <TextInput
+            placeholder="60"
+            placeholderTextColor={ui.textMuted}
+            keyboardType="number-pad"
+            value={form.slotDurationMinutes}
+            onChangeText={set("slotDurationMinutes")}
+            style={inputBox()}
+          />
+        </View>
+      </View>
+      <Text style={{ color: ui.textMuted, fontSize: 11, marginTop: 2 }}>
+        Días sin disponibilidad (opcional): fechas puntuales en las que nadie puede reservar esta
+        amenidad, ej. por mantenimiento.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <TextInput
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={ui.textMuted}
+          value={blockDate}
+          onChangeText={setBlockDate}
+          style={[inputBox(), { flex: 1 }]}
+        />
+        <TextInput
+          placeholder="Motivo (opcional)"
+          placeholderTextColor={ui.textMuted}
+          value={blockReason}
+          onChangeText={setBlockReason}
+          style={[inputBox(), { flex: 1 }]}
+        />
+        <PillButton label="Agregar" tone="secondary" size="sm" onPress={addBlockedDate} />
+      </View>
+      {form.blockedDates.length > 0 && (
+        <View style={{ gap: 4 }}>
+          {form.blockedDates.map((b) => (
+            <View
+              key={b.date}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingVertical: 4,
+                paddingHorizontal: 8,
+                borderRadius: 8,
+                backgroundColor: "rgba(220,38,38,0.06)",
+              }}
+            >
+              <Text style={{ color: ui.text, fontSize: 12 }}>
+                {b.date}
+                {b.reason ? ` · ${b.reason}` : ""}
+              </Text>
+              <Pressable onPress={() => removeBlockedDate(b.date)}>
+                <Text style={{ color: ui.danger, fontSize: 12, fontWeight: "700" }}>Quitar</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+      <Text style={{ color: ui.textMuted, fontSize: 11, marginTop: 2 }}>
+        Bloqueos recurrentes (opcional): ej. "todos los martes" (cada 1 semana) o "cada 2 semanas los
+        martes" — se repiten a partir de la fecha inicial, en su mismo día de la semana.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+        <View style={{ flex: 1, minWidth: 120, gap: 4 }}>
+          <Text style={{ color: ui.textMuted, fontSize: 11 }}>A partir de</Text>
+          <TextInput
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={ui.textMuted}
+            value={recurAnchor}
+            onChangeText={setRecurAnchor}
+            style={inputBox()}
+          />
+        </View>
+        <View style={{ width: 110, gap: 4 }}>
+          <Text style={{ color: ui.textMuted, fontSize: 11 }}>Cada (semanas)</Text>
+          <TextInput
+            placeholder="1"
+            placeholderTextColor={ui.textMuted}
+            keyboardType="number-pad"
+            value={recurInterval}
+            onChangeText={setRecurInterval}
+            style={inputBox()}
+          />
+        </View>
+        <View style={{ flex: 1, minWidth: 120, gap: 4 }}>
+          <Text style={{ color: ui.textMuted, fontSize: 11 }}>Hasta (opcional)</Text>
+          <TextInput
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={ui.textMuted}
+            value={recurUntil}
+            onChangeText={setRecurUntil}
+            style={inputBox()}
+          />
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <TextInput
+          placeholder="Motivo (opcional)"
+          placeholderTextColor={ui.textMuted}
+          value={recurReason}
+          onChangeText={setRecurReason}
+          style={[inputBox(), { flex: 1 }]}
+        />
+        <PillButton label="Agregar" tone="secondary" size="sm" onPress={addRecurringBlock} />
+      </View>
+      {form.recurringBlocks.length > 0 && (
+        <View style={{ gap: 4 }}>
+          {form.recurringBlocks.map((rb, idx) => (
+            <View
+              key={`${rb.anchorDate}-${idx}`}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingVertical: 4,
+                paddingHorizontal: 8,
+                borderRadius: 8,
+                backgroundColor: "rgba(220,38,38,0.06)",
+              }}
+            >
+              <Text style={{ color: ui.text, fontSize: 12, flex: 1 }}>
+                {rb.intervalWeeks === 1
+                  ? `Todos los ${weekdayOf(rb.anchorDate)}`
+                  : `Cada ${rb.intervalWeeks} semanas, ${weekdayOf(rb.anchorDate)}`}
+                {` (desde ${rb.anchorDate}${rb.until ? ` hasta ${rb.until}` : ""})`}
+                {rb.reason ? ` · ${rb.reason}` : ""}
+              </Text>
+              <Pressable onPress={() => removeRecurringBlock(idx)}>
+                <Text style={{ color: ui.danger, fontSize: 12, fontWeight: "700" }}>Quitar</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
       <TextInput
         placeholder="Notas para el condómino (ej. traer candado propio)"
         placeholderTextColor={ui.textMuted}
@@ -274,6 +500,11 @@ export default function BoardAmenitiesScreen() {
         maxReservationsPerUnitPerDay: a.maxReservationsPerUnitPerDay,
         maxReservationsPerDay: a.maxReservationsPerDay,
         advanceBookingDays: a.advanceBookingDays,
+        openTime: a.openTime,
+        closeTime: a.closeTime,
+        slotDurationMinutes: a.slotDurationMinutes,
+        blockedDates: Array.isArray(a.blockedDates) ? a.blockedDates : [],
+        recurringBlocks: Array.isArray(a.recurringBlocks) ? a.recurringBlocks : [],
         notes: a.notes,
         status: a.status,
       }));
@@ -303,6 +534,20 @@ export default function BoardAmenitiesScreen() {
         maxReservationsPerUnitPerDay: toIntOrUndefined(createForm.maxReservationsPerUnitPerDay),
         maxReservationsPerDay: toIntOrUndefined(createForm.maxReservationsPerDay),
         advanceBookingDays: toIntOrUndefined(createForm.advanceBookingDays),
+        openTime: createForm.openTime.trim() || undefined,
+        closeTime: createForm.closeTime.trim() || undefined,
+        slotDurationMinutes: toIntOrUndefined(createForm.slotDurationMinutes),
+        blockedDates: createForm.blockedDates.length
+          ? createForm.blockedDates.map((b) => ({ date: b.date, reason: b.reason || undefined }))
+          : undefined,
+        recurringBlocks: createForm.recurringBlocks.length
+          ? createForm.recurringBlocks.map((r) => ({
+              anchorDate: r.anchorDate,
+              intervalWeeks: r.intervalWeeks,
+              until: r.until || undefined,
+              reason: r.reason || undefined,
+            }))
+          : undefined,
         notes: createForm.notes.trim() || undefined,
       });
       setCreateForm(EMPTY_FORM);
@@ -324,6 +569,11 @@ export default function BoardAmenitiesScreen() {
         a.maxReservationsPerUnitPerDay != null ? String(a.maxReservationsPerUnitPerDay) : "",
       maxReservationsPerDay: a.maxReservationsPerDay != null ? String(a.maxReservationsPerDay) : "",
       advanceBookingDays: a.advanceBookingDays != null ? String(a.advanceBookingDays) : "",
+      openTime: a.openTime ?? "",
+      closeTime: a.closeTime ?? "",
+      slotDurationMinutes: a.slotDurationMinutes != null ? String(a.slotDurationMinutes) : "",
+      blockedDates: a.blockedDates ?? [],
+      recurringBlocks: a.recurringBlocks ?? [],
       notes: a.notes ?? "",
     });
   };
@@ -338,6 +588,20 @@ export default function BoardAmenitiesScreen() {
         maxReservationsPerUnitPerDay: toIntOrUndefined(editForm.maxReservationsPerUnitPerDay),
         maxReservationsPerDay: toIntOrUndefined(editForm.maxReservationsPerDay),
         advanceBookingDays: toIntOrUndefined(editForm.advanceBookingDays),
+        openTime: editForm.openTime.trim() || undefined,
+        closeTime: editForm.closeTime.trim() || undefined,
+        slotDurationMinutes: toIntOrUndefined(editForm.slotDurationMinutes),
+        blockedDates: editForm.blockedDates.length
+          ? editForm.blockedDates.map((b) => ({ date: b.date, reason: b.reason || undefined }))
+          : undefined,
+        recurringBlocks: editForm.recurringBlocks.length
+          ? editForm.recurringBlocks.map((r) => ({
+              anchorDate: r.anchorDate,
+              intervalWeeks: r.intervalWeeks,
+              until: r.until || undefined,
+              reason: r.reason || undefined,
+            }))
+          : undefined,
         notes: editForm.notes.trim() || undefined,
       });
       setEditingId(null);
@@ -506,6 +770,17 @@ export default function BoardAmenitiesScreen() {
                       )}
                       {item.advanceBookingDays != null && (
                         <RuleChip text={`Hasta ${item.advanceBookingDays} día(s) antes`} />
+                      )}
+                      {item.openTime && item.closeTime && item.slotDurationMinutes != null && (
+                        <RuleChip
+                          text={`${item.openTime}–${item.closeTime}, bloques de ${item.slotDurationMinutes} min`}
+                        />
+                      )}
+                      {!!item.blockedDates?.length && (
+                        <RuleChip text={`${item.blockedDates.length} día(s) bloqueado(s)`} />
+                      )}
+                      {!!item.recurringBlocks?.length && (
+                        <RuleChip text={`${item.recurringBlocks.length} bloqueo(s) recurrente(s)`} />
                       )}
                     </View>
                     {!!item.notes && (
